@@ -1,6 +1,7 @@
 /*
 command to run this main() :
-    java --class-path bin com/neuralNetworks/Genetics 128 9 1 4 8 0 TicTacToe
+    java --class-path bin com/neuralNetworks/Genetics <generation size> <nb generations> <depth> <nb cores> <nb saved> <load> <game>
+    java --class-path bin com/neuralNetworks/Genetics 128 10 1 4 8 0 TicTacToe
 */
 
 package com.neuralNetworks;
