@@ -27,7 +27,7 @@ public class TTTEvaluationNeural implements NeuralEvaluation {
         }
         input[squares.length] = ((double) board.getTurn())*2 - 1;
         //System.out.println("Output : " + Double.toString(nn.propagate(input)[0]));
-        return nn.propagate(new Matrix(input)).getTable()[0][0];
+        return nn.propagate(new Matrix(input)).getContent()[0][0];
     }
 
     public static int getNbInputs() { return nbInputs; }

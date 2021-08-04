@@ -263,7 +263,7 @@ public class NeuralNetwork implements Serializable {
                 //System.out.println(output);
                 //System.out.println(labels[i]);
             }
-            averageCost += cost(output.transpose().getTable()[0], labels[i].transpose().getTable()[0]);
+            averageCost += cost(output.transpose().getContent()[0], labels[i].transpose().getContent()[0]);
             if(answer == expected) {
                 accuracy++;
             }

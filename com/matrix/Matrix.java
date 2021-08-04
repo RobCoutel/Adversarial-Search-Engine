@@ -6,12 +6,12 @@ import java.io.Serializable;
 
 public class Matrix implements Serializable {
     private int width, height;
-    private double[][] table;
+    private double[] content;
 
     public Matrix(int height, int width) {
         this.width = width;
         this.height = height;
-        table = new double[height][width];
+        content = new double[height*width];
     }
 
     public Matrix(double[][] content) {
@@ -23,64 +23,64 @@ public class Matrix implements Serializable {
                 throw new IllegalArgumentException("The lines of the matrix are of different lengths");
             }
         }
-        table = new double[height][width];
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] = content[i][j];
-            }
+        this.content = new double[height*width];
+        for(int i=0; i<height*width; i++) {
+            this.content[i] = content[i/width][i%width];
         }
     }
 
-    public Matrix(double[] content) {
-        height = content.length;
-        width = 1;
-        table = new double[height][1];
-        for(int i=0; i<height; i++) {
-            table[i][0] = content[i];
+    public Matrix(double[] content, int height, int width) {
+        if(content.length != height*width) {
+            throw new IllegalArgumentException("The content of the matrix is incopatible with the provided dimensions");
         }
+        this.height = height;
+        this.width = width;
+        this.content = new double[height*width];
+        for(int i=0; i<height*width; i++) {
+            this.content[i] = content[i];
+        }
+    }
+
+    // this contructor returns a vector
+    public Matrix(double[] content) {
+        this(content, content.length, 1);
     }
 
     public static Matrix ones(int height, int width) {
         Matrix toReturn = new Matrix(height, width);
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                toReturn.table[i][j] = 1;
-            }
+        for(int i=0; i<height*width; i++) {
+            toReturn.content[i] = 1;
         }
         return toReturn;
     }
 
     public Matrix clone() {
-        double[][] tableClone = new double[height][width];
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                tableClone[i][j] = table[i][j];
-            }
-        }
-        return new Matrix(tableClone);
+        return new Matrix(content, height, width);
     }
 
-    public double getElement(int i, int j) { return table[i][j]; }
-    public double[][] getTable() { return table; }
+    public double getElement(int i, int j) { return content[i*width + j]; }
+    public double[][] getContent() {
+        double[][] toReturn = new double[height][width];
+        for(int i=0; i<height*width; i++) {
+            toReturn[i/width][i%width] = content[i];
+        }
+        return toReturn;
+    }
     public int getWidth() { return width; }
     public int getHeight() { return height; }
 
     public Matrix randomFill(double rangeMin, double rangeMax) {
         Random r = new Random();
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] = rangeMin + (rangeMax - rangeMin) * r.nextDouble();
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] = rangeMin + (rangeMax - rangeMin) * r.nextDouble();
         }
         return this;
     }
 
     public Matrix randomFillGauss(double mean, double stdev) {
         Random r = new Random();
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] = mean + stdev * r.nextGaussian();
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] = mean + stdev * r.nextGaussian();
         }
         return this;
     }
@@ -92,10 +92,8 @@ public class Matrix implements Serializable {
             errMsg += " and the other is " + Integer.toString(mat.height) + "x" + Integer.toString(mat.width);
             throw new IllegalArgumentException(errMsg);
         }
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] += mat.table[i][j];
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] += mat.content[i];
         }
         return this;
     }
@@ -107,10 +105,8 @@ public class Matrix implements Serializable {
             errMsg += " and the other is " + Integer.toString(mat.height) + "x" + Integer.toString(mat.width);
             throw new IllegalArgumentException(errMsg);
         }
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] *= mat.table[i][j];
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] *= mat.content[i];
         }
         return this;
     }
@@ -125,27 +121,22 @@ public class Matrix implements Serializable {
 
         int newHeight = height;
         int newWidth = mat.width;
-        double[][] product = new double[newHeight][newWidth];
+        double[] product = new double[newHeight*newWidth];
         for(int i=0; i<newHeight; i++) {
             for(int j=0; j<newWidth; j++) {
-                double sum = 0.0;
                 for(int k=0; k<mat.height; k++) {
-                    sum += table[i][k] * mat.table[k][j];
+                    product[i*newWidth+j] += content[i*width+k] * mat.content[k*mat.width+j];
                 }
-                product[i][j] = sum;
             }
         }
-        table = product;
-        height = newHeight;
+        content = product;
         width = newWidth;
         return this;
     }
 
     public Matrix map(MapFunction func) {
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] = func.mapFunc(table[i][j]);
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] = func.mapFunc(content[i]);
         }
         return this;
     }
@@ -157,34 +148,30 @@ public class Matrix implements Serializable {
             errMsg += " and the other is " + Integer.toString(mat.height) + "x" + Integer.toString(mat.width);
             throw new IllegalArgumentException(errMsg);
         }
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                table[i][j] = func.applyFunc(table[i][j], mat.table[i][j]);
-            }
+        for(int i=0; i<height*width; i++) {
+            content[i] = func.applyFunc(content[i], mat.content[i]);
         }
         return this;
     }
 
     public Matrix transpose() {
-        double[][] newTable = new double[width][height];
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                newTable[j][i] = table[i][j];
-            }
+        double[] newcontent = new double[width*height];
+        for(int i=0; i<height*width; i++) {
+            int index = (i%width)*width + i/width;
+            newcontent[index] = content[i];
         }
+        int aux = width;
         width = height;
-        height = newTable.length;
-        table = newTable;
+        height = aux;
+        content = newcontent;
         return this;
     }
 
     public double maxValue() {
         double max = Double.NEGATIVE_INFINITY;
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                if(table[i][j] > max) {
-                    max = table[i][j];
-                }
+        for(int i=0; i<height*width; i++) {
+            if(content[i] > max) {
+                max = content[i];
             }
         }
         return max;
@@ -193,13 +180,11 @@ public class Matrix implements Serializable {
     public int[] maxIndex() {
         int indexHeight = 0, indexWidth = 0;
         double max = Double.NEGATIVE_INFINITY;
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                if(table[i][j] > max) {
-                    max = table[i][j];
-                    indexHeight = i;
-                    indexWidth = j;
-                }
+        for(int i=0; i<height*width; i++) {
+            if(content[i] > max) {
+                max = content[i];
+                indexHeight = i/width;
+                indexWidth = i%width;
             }
         }
         int[] toReturn = new int[2];
@@ -210,11 +195,9 @@ public class Matrix implements Serializable {
 
     public double minValue() {
         double min = Double.POSITIVE_INFINITY;
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                if(table[i][j] < min) {
-                    min = table[i][j];
-                }
+        for(int i=0; i<height*width; i++) {
+            if(content[i] < min) {
+                min = content[i];
             }
         }
         return min;
@@ -223,13 +206,11 @@ public class Matrix implements Serializable {
     public int[] minIndex() {
         int indexHeight = 0, indexWidth = 0;
         double min = Double.POSITIVE_INFINITY;
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                if(table[i][j] < min) {
-                    min = table[i][j];
-                    indexHeight = i;
-                    indexWidth = j;
-                }
+        for(int i=0; i<height*width; i++) {
+            if(content[i] < min) {
+                min = content[i];
+                indexHeight = i/width;
+                indexWidth = i%width;
             }
         }
         int[] toReturn = new int[2];
@@ -239,27 +220,21 @@ public class Matrix implements Serializable {
     }
 
     public void sum(int axis) {
-        double[][] newTable = new double[1][width];
         if(axis == 0) {
-            for(int j=0; j<width; j++) {
-                double sum = 0;
-                for(int i=0; i<height; i++) {
-                    sum += table[i][j];
-                }
-                table[0][j] = sum;
+            double[] newcontent = new double[width];
+            for(int i=0; i<height*width; i++) {
+                newcontent[i/width] += content[i];
             }
             height = 1;
+            content = newcontent;
             return;
         }
         if(axis == 1) {
+            double[] newcontent = new double[height];
             for(int i=0; i<height; i++) {
-                double sum = 0;
-                for(int j=0; j<width; j++) {
-                    sum += table[i][j];
-                }
-                table[i] = new double[1];
-                table[i][0] = sum;
+                newcontent[i%width] += content[i];
             }
+            content = newcontent;
             width = 1;
             return;
         }
@@ -271,25 +246,23 @@ public class Matrix implements Serializable {
         if(height != mat.height || width != mat.width) {
             return false;
         }
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                if(table[i][j] != mat.table[i][j]) {
-                    return false;
-                }
+        for(int i=0; i<height*width; i++) {
+            if(content[i] != mat.content[i]) {
+                return false;
             }
         }
         return true;
     }
 
     public static Matrix average(Matrix[] matrices) {
-        Matrix toReturn = new Matrix(matrices[0].height, matrices[0].width);
-        for(int i=0; i<toReturn.height; i++) {
-            for(int j=0; j<toReturn.width; j++) {
-                for(int k=0; k<matrices.length; k++) {
-                    toReturn.table[i][j] += matrices[k].table[i][j];
-                }
-                toReturn.table[i][j] /= matrices.length;
+        int height = matrices[0].height;
+        int width = matrices[0].width;
+        Matrix toReturn = new Matrix(height, width);
+        for(int i=0; i<height*width; i++) {
+            for(int k=0; k<matrices.length; k++) {
+                toReturn.content[i] += matrices[k].content[i];
             }
+            toReturn.content[i] /= matrices.length;
         }
         return toReturn;
     }
@@ -299,29 +272,6 @@ public class Matrix implements Serializable {
 
     }*/
 
-    private Matrix subMatrix(int removedRow, int removedColumn) {
-        if(removedRow > height || removedColumn > width) {
-            System.out.println("Error : Cannot remove this column or row");
-        }
-        double[][] subTable = new double[height-1][width-1];
-        int incRow = 0;
-        for(int i=0; i<height; i++) {
-            int incCol = 0;
-            if(i == removedRow) {
-                incRow -= 1;
-                continue;
-            }
-            for(int j=0; j<width; j++) {
-                if(j == removedColumn) {
-                    incCol -= 1;
-                    continue;
-                }
-                subTable[i+incRow][j+incCol] = table[i][j];
-            }
-        }
-        return new Matrix(subTable);
-    }
-
     public String toString() {
         String s = "";
         s += "\n";
@@ -329,11 +279,11 @@ public class Matrix implements Serializable {
         s += "Dimensions : " + Integer.toString(height) + "x" + Integer.toString(width) + "\n";
         s += "Content : \n";
 
-        for(int i=0; i<height; i++) {
-            for(int j=0; j<width; j++) {
-                s += Double.toString(table[i][j]) + "\t";
+        for(int i=0; i<height*width; i++) {
+            s += Double.toString(content[i]) + "\t";
+            if(i%width==width-1) {
+                s += "\n";
             }
-            s += "\n";
         }
         s += "-----------------\n";
         return s;
