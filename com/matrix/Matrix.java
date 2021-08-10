@@ -8,16 +8,21 @@ public class Matrix implements Serializable {
     private int width, height;
     private double[] content;
 
+    /*
+    Creates a matrix of zeros of size [height x width]
+    */
     public Matrix(int height, int width) {
         this.width = width;
         this.height = height;
         content = new double[height*width];
     }
 
+    /*
+    Creates a matrix with the content provided as argument
+    */
     public Matrix(double[][] content) {
         height = content.length;
         width = content[0].length;
-        // TODO make it abstract and remove this check
         for(int i=1; i<height; i++) {
             if (content[i].length != width) {
                 throw new IllegalArgumentException("The lines of the matrix are of different lengths");
@@ -29,6 +34,9 @@ public class Matrix implements Serializable {
         }
     }
 
+    /*
+    Creates a matrix of size [height x width] with the content provided.
+    */
     public Matrix(double[] content, int height, int width) {
         if(content.length != height*width) {
             throw new IllegalArgumentException("The content of the matrix is incopatible with the provided dimensions");
@@ -41,11 +49,17 @@ public class Matrix implements Serializable {
         }
     }
 
-    // this contructor returns a vector
+    /*
+    Creates a matrix of size [content.length x 1]
+    with the content provided as argument
+    */
     public Matrix(double[] content) {
         this(content, content.length, 1);
     }
 
+    /*
+    Creates a matrix of ones of size [content.length x 1]
+    */
     public static Matrix ones(int height, int width) {
         Matrix toReturn = new Matrix(height, width);
         for(int i=0; i<height*width; i++) {
@@ -156,9 +170,10 @@ public class Matrix implements Serializable {
 
     public Matrix transpose() {
         double[] newcontent = new double[width*height];
-        for(int i=0; i<height*width; i++) {
-            int index = (i%width)*width + i/width;
-            newcontent[index] = content[i];
+        for(int i=0; i<height; i++) {
+            for(int j=0; j<width; j++) {
+                newcontent[j*height + i] = content[i*width + j];
+            }
         }
         int aux = width;
         width = height;
@@ -267,11 +282,6 @@ public class Matrix implements Serializable {
         return toReturn;
     }
 
-
-    /*public double determinant() {
-
-    }*/
-
     public String toString() {
         String s = "";
         s += "\n";
@@ -287,5 +297,12 @@ public class Matrix implements Serializable {
         }
         s += "-----------------\n";
         return s;
+    }
+
+    public static void main(String[] args) {
+        double[][] content = {{1,2,3},{4,5,6}};
+        Matrix mat = new Matrix(content);
+        System.out.println(mat);
+        System.out.println(mat.transpose());
     }
 }
