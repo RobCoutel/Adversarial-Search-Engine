@@ -68,6 +68,14 @@ public class Matrix implements Serializable {
         return toReturn;
     }
 
+    public static Matrix eye(int diag) {
+        Matrix toReturn = new Matrix(diag, diag);
+        for(int i=0; i<diag; i++) {
+            toReturn.content[i*(diag+1)] = 1;
+        }
+        return toReturn;
+    }
+
     public Matrix clone() {
         return new Matrix(content, height, width);
     }
@@ -179,6 +187,49 @@ public class Matrix implements Serializable {
         width = height;
         height = aux;
         content = newcontent;
+        return this;
+    }
+
+    public Matrix normalize() {
+        double sum = 0;
+        for(int i=0; i<height*width; i++) {
+            sum += Math.abs(content[i]);
+        }
+        if(sum != 0) {
+            for(int i=0; i<height*width; i++) {
+                content[i] /= sum;
+            }
+        }
+        return this;
+    }
+
+    public Matrix normalize(int axis) {
+        if(axis == 0) {
+            for(int i=0; i<height; i++) {
+                double sum = 0;
+                for(int j=0; j<width; j++) {
+                    sum += Math.abs(content[i*width + j]);
+                }
+                if(sum != 0) {
+                    for(int j=0; i<width; i++) {
+                        content[i*width + j] /= sum;
+                    }
+                }
+            }
+        }
+        else {
+            for(int i=0; i<width; i++) {
+                double sum = 0;
+                for(int j=0; j<height; j++) {
+                    sum += Math.abs(content[i*height + j]);
+                }
+                if(sum != 0) {
+                    for(int j=0; i<height; i++) {
+                        content[i*height + j] /= sum;
+                    }
+                }
+            }
+        }
         return this;
     }
 

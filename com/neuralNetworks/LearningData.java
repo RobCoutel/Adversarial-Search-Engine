@@ -65,7 +65,7 @@ public class LearningData {
             myReader.close();
 
         } catch (FileNotFoundException e) {
-            System.out.println("An error occurred.");
+            System.out.println("The file : \"" + dataPath + "\" was not found.");
             e.printStackTrace();
         }
     }

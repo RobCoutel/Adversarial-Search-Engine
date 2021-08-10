@@ -21,7 +21,7 @@ public class NeuralNetwork implements Serializable {
     };
 
     // Activation function
-    private static transient MapFunction actFunc = new MapFunction() {
+    private static transient MapFunction sigmoid = new MapFunction() {
         public double mapFunc(double x) {
             return 1 / (1 + Math.exp(-x));
         }
@@ -37,7 +37,7 @@ public class NeuralNetwork implements Serializable {
     };
 
     // make a step in the gradient direction
-    private double step = 0.5;
+    private double step = 0.1;
     private transient ApplicationFunction makeStep = new ApplicationFunction() {
         public double applyFunc(double x, double y) {
             return x - step * y;
@@ -66,7 +66,7 @@ public class NeuralNetwork implements Serializable {
     };
 
     private void updateStep() {
-        step *= 0.995;
+        step *= 1;
     }
 
 /*******************************************************************************
@@ -74,8 +74,8 @@ public class NeuralNetwork implements Serializable {
 *******************************************************************************/
     private Matrix[] layerWeights;
     private Matrix[] layerBiases;
-    private Matrix[] neuronActivity;
-    private Matrix[] neuronLinearComb;
+    private Matrix[] nActivity;
+    private Matrix[] nLinComb;
     private int[] dimensions;
     private int nbLayers;
     private static int serialNumberTot = 0;
@@ -85,8 +85,8 @@ public class NeuralNetwork implements Serializable {
         this.dimensions = dimensions;
         nbLayers = dimensions.length - 1;
 
-        neuronActivity = new Matrix[nbLayers + 1];
-        neuronLinearComb = new Matrix[nbLayers + 1];
+        nActivity = new Matrix[nbLayers + 1];
+        nLinComb = new Matrix[nbLayers + 1];
 
         layerWeights = new Matrix[nbLayers];
         layerBiases = new Matrix[nbLayers];
@@ -103,6 +103,24 @@ public class NeuralNetwork implements Serializable {
         serialNumber = serialNumberTot++;
     }
 
+    public NeuralNetwork(Matrix[] weights, Matrix[] biases) {
+        if(weights.length != biases.length) {
+            System.out.println("Incompatible length (in NeuralNetwork(Matrix[] weights, Matrix[] biases))");
+        }
+        nbLayers = weights.length;
+        layerWeights = weights.clone();
+        layerBiases = biases.clone();
+        nActivity = new Matrix[nbLayers + 1];
+        nLinComb = new Matrix[nbLayers + 1];
+        serialNumber = serialNumberTot++;
+
+        dimensions = new int[nbLayers + 1];
+        dimensions[0] = weights[0].getHeight();
+        for(int i=1; i<nbLayers; i++) {
+            dimensions[i] = weights[i-1].getWidth();
+        }
+    }
+
     public NeuralNetwork clone() {
         NeuralNetwork clone = new NeuralNetwork(dimensions);
         for(int i=0; i<nbLayers; i++) {
@@ -116,16 +134,14 @@ public class NeuralNetwork implements Serializable {
     public int getSerialNumber() { return serialNumber; }
 
     public Matrix propagate(Matrix input) {
-        neuronActivity[0] = input.clone();
+        nActivity[0] = input.clone();
         for(int i=0; i<nbLayers; i++) {
-            neuronLinearComb[i+1] = layerWeights[i].clone();
-            neuronLinearComb[i+1].multiply(neuronActivity[i]);
-            neuronLinearComb[i+1].add(layerBiases[i]);
-            neuronActivity[i+1] = neuronLinearComb[i+1].clone();
-            neuronActivity[i+1].map(actFunc);
+            nLinComb[i+1] = layerWeights[i].clone();
+            nLinComb[i+1].multiply(nActivity[i]).add(layerBiases[i]);
+            nActivity[i+1] = nLinComb[i+1].clone().map(sigmoid);
         }
 
-        return neuronActivity[nbLayers].clone();
+        return nActivity[nbLayers].clone();
     }
 
     public String toString() {
@@ -203,8 +219,8 @@ public class NeuralNetwork implements Serializable {
     gradient on the Biases
     */
     private Matrix[][] learnOneData(Matrix inputs, Matrix label) {
-        Matrix[] weightsGradient = new Matrix[nbLayers];
-        Matrix[] biasesGradient = new Matrix[nbLayers];
+        Matrix[] wGrad = new Matrix[nbLayers];
+        Matrix[] bGrad = new Matrix[nbLayers];
         Matrix outputs = propagate(inputs);
 
         Matrix dCdA = outputs.clone();
@@ -221,31 +237,35 @@ public class NeuralNetwork implements Serializable {
             // bias gradient
             // dC / db_i_l = (dC / da_i_(l+1)) * (da_i_(l+1) / dz_i_(l+1)) * (dz_i_(l+1) / db_i_l)
             // dC / db_i_l = dCdA * sigmoidDerivative(z_i_(l+1)) * 1
-            Matrix dAdz = neuronLinearComb[i+1].clone().map(sigmoidDerivative);
-            // update the dCdA and clone the result in biasesGradient
-            biasesGradient[i] = dCdA.dotMultiply(dAdz).clone();
+            Matrix z_next = nLinComb[i+1];
+            Matrix a = nActivity[i];
 
-            // weights gradient
-            // dC / dw_ij_l = (dC / da_i_(l+1)) * (da_i_(l+1) / dz_i_(l+1)) * (dz_i_(l+1) / dw_ij_l)
-            // dC / dw_ij_l = dCdA * sigmoidDerivative(z_i_(l+1)) * a_j_l
-            // (n_l x 1) * (n_(l-1) x 1)T -> n_l x n_(l-1)
-            weightsGradient[i] = biasesGradient[i].clone().multiply(neuronActivity[i].transpose());
+            Matrix dAdz = z_next.clone().map(sigmoidDerivative);
+            // update the dCdA and clone the result in bGrad
+            bGrad[i] = dCdA.dotMultiply(dAdz).clone();
+
+            /* weights gradient
+               dC / dw_ij_l = (dC / da_i_(l+1)) * (da_i_(l+1) / dz_i_(l+1)) * (dz_i_(l+1) / dw_ij_l)
+               dC / dw_ij_l = dCdA * sigmoidDerivative(z_i_(l+1)) * a_j_l
+               (n_l x 1) * (n_(l-1) x 1)T -> n_l x n_(l-1)
+            */
+            wGrad[i] = bGrad[i].clone().multiply(a.transpose());
 
             /* dC / da_k_l
             //    = sum_j[
             //          (dC / da_j_(l+1))           -> previous layer
             //        * (da_j_(l+1) / dz_j_(l+1))   -> sigmoidDerivative
-            //        * (dz_j_(l+1) / da_k_l)       -> matMultiply with neuronActivity
+            //        * (dz_j_(l+1) / da_k_l)       -> matMultiply with nActivity
             //    ]
             */
             //dCdA.dotMultiply(dAdz);
             dCdA = layerWeights[i].clone().transpose().multiply(dCdA);
             //dCdA.sum(1);
-            //System.out.println(dCdA.equals(biasesGradient[i].clone().transpose().multiply(layerWeights[i]).transpose()));
-            //dCdA = biasesGradient[i].clone();
+            //System.out.println(dCdA.equals(bGrad[i].clone().transpose().multiply(layerWeights[i]).transpose()));
+            //dCdA = bGrad[i].clone();
             //dCdA.transpose().multiply(layerWeights[i]).transpose();
         }
-        Matrix[][] toReturn = {weightsGradient, biasesGradient};
+        Matrix[][] toReturn = {wGrad, bGrad};
         return toReturn;
     }
 
@@ -259,9 +279,10 @@ public class NeuralNetwork implements Serializable {
             int answer = output.maxIndex()[0];
             int expected = labels[i].maxIndex()[0];
             if(i==0) {
-                //System.out.println("Expected : " + expected);
-                //System.out.println(output);
+                System.out.println("Expected : " + expected);
+                System.out.println(output);
                 //System.out.println(labels[i]);
+                //System.out.println(this);
             }
             averageCost += cost(output.transpose().getContent()[0], labels[i].transpose().getContent()[0]);
             if(answer == expected) {
@@ -275,6 +296,11 @@ public class NeuralNetwork implements Serializable {
     }
 
     private double cost(double[] results, double[] labels) {
+        if(results.length != labels.length) {
+            String errMsg = "The length of the two inputs is not the same (";
+            errMsg += results.length + ", " + labels.length + ")";
+            throw new IllegalArgumentException(errMsg);
+        }
         double toReturn = 0;
         for(int i=0; i<results.length; i++) {
             toReturn += (labels[i] - results[i]) * (labels[i] - results[i]);
