@@ -24,4 +24,8 @@ public class TTTMove implements Move {
     public int compareTo(Move move) {
         return 0;
     }
+
+    public String toString() {
+        return Integer.toString(move);
+    }
 }

@@ -15,6 +15,9 @@ public class TicTacToe {
     private static final int depth = 10;
     private static final int budget = 500;
     private static Player getAgent(String agentName, String color) {
+        if(agentName.equals("Human")) {
+            return new Human(color + " Human");
+        }
         if(agentName.equals("AgentBudget")) {
             return new AgentBudget(color + " Agent Budget", budget, new TTTEvaluation());
         }

@@ -6,4 +6,6 @@ public interface Move extends Comparable<Move> {
     public boolean isResignation();
 
     public int compareTo(Move move);
+
+    public String toString();
 }

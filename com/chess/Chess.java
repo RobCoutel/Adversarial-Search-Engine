@@ -16,6 +16,9 @@ public class Chess {
     private static final int budget = 50000;
 
     private static Player getAgent(String agentName, String color) {
+        if(agentName.equals("Human")) {
+            return new Human(color + " Human");
+        }
         if(agentName.equals("AgentBudget")) {
             return new AgentBudget(color + " Agent Budget", 50000, new ChessEvaluation());
         }
