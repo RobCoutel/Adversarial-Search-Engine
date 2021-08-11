@@ -58,10 +58,10 @@ public class Match extends Thread {
         resultP2 += 1 - matchRes;
 
         if(game.equals("Chess")) {
-            board = new ChessBoard(p1, p2);
+            board = new ChessBoard(p2, p1);
         }
         if(game.equals("TicTacToe")) {
-            board = new TTTBoard(p1, p2);
+            board = new TTTBoard(p2, p1);
         }
         board.play();
         matchRes = board.gameOver();
