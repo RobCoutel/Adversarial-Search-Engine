@@ -4,7 +4,6 @@ import com.matrix.*;
 
 import java.lang.Math;
 import java.lang.IllegalArgumentException;
-import java.util.Random;
 import java.io.Serializable;
 
 public class NeuralNetwork implements Serializable {
@@ -12,14 +11,6 @@ public class NeuralNetwork implements Serializable {
 /*******************************************************************************
                                  LAMBDA FUNCTIONS
 *******************************************************************************/
-    // derivative of the cost function :
-    // dC / da_i_L = (a_i_L - label_i)
-    private static transient ApplicationFunction costDerivative = new ApplicationFunction() {
-        public double applyFunc(double x, double y) {
-            return x - y;
-        }
-    };
-
     // Activation function
     private static transient MapFunction sigmoid = new MapFunction() {
         public double mapFunc(double x) {
@@ -27,66 +18,19 @@ public class NeuralNetwork implements Serializable {
         }
     };
 
-    // derivative of the activation function :
-    // da_i_L / dz_i_L = exp(-z_i_L) / (1 + exp(-z_i_L))^2
-    private static transient MapFunction sigmoidDerivative = new MapFunction() {
-        public double mapFunc(double x) {
-            double exp = Math.exp(-x);
-            return exp / ((1 + exp) * (1 + exp));
-        }
-    };
-
-    // make a step in the gradient direction
-    private double step = 0.1;
-    private transient ApplicationFunction makeStep = new ApplicationFunction() {
-        public double applyFunc(double x, double y) {
-            return x - step * y;
-        }
-    };
-
-    private static transient ApplicationFunction breedFunc = new ApplicationFunction() {
-        private double crossOverRate = 0.05;
-        private double mutationRate = 0.01;
-        private double mutationStdev = 0.5;
-        Random rand = new Random();
-        boolean pickFirst = true;
-        public double applyFunc(double x, double y) {
-            double r = rand.nextDouble();
-            if(r < crossOverRate) {
-                pickFirst = !pickFirst;
-            }
-            double z;
-            z = pickFirst ? x : y;
-            r = rand.nextDouble();
-            if(r < mutationRate) {
-                z *= rand.nextGaussian() * mutationStdev;
-            }
-            return z;
-        }
-    };
-
-    private void updateStep() {
-        step *= 1;
-    }
-
 /*******************************************************************************
                                  CLASS DECLARATION
 *******************************************************************************/
-    private Matrix[] layerWeights;
-    private Matrix[] layerBiases;
-    private Matrix[] nActivity;
-    private Matrix[] nLinComb;
-    private int[] dimensions;
-    private int nbLayers;
+    protected Matrix[] layerWeights;
+    protected Matrix[] layerBiases;
+    protected int[] dimensions;
+    protected int nbLayers;
     private static int serialNumberTot = 0;
     private int serialNumber;
 
     public NeuralNetwork(int[] dimensions) {
         this.dimensions = dimensions;
         nbLayers = dimensions.length - 1;
-
-        nActivity = new Matrix[nbLayers + 1];
-        nLinComb = new Matrix[nbLayers + 1];
 
         layerWeights = new Matrix[nbLayers];
         layerBiases = new Matrix[nbLayers];
@@ -110,8 +54,6 @@ public class NeuralNetwork implements Serializable {
         nbLayers = weights.length;
         layerWeights = weights.clone();
         layerBiases = biases.clone();
-        nActivity = new Matrix[nbLayers + 1];
-        nLinComb = new Matrix[nbLayers + 1];
         serialNumber = serialNumberTot++;
 
         dimensions = new int[nbLayers + 1];
@@ -134,14 +76,13 @@ public class NeuralNetwork implements Serializable {
     public int getSerialNumber() { return serialNumber; }
 
     public Matrix propagate(Matrix input) {
-        nActivity[0] = input.clone();
+        Matrix output = input.clone();
         for(int i=0; i<nbLayers; i++) {
-            nLinComb[i+1] = layerWeights[i].clone();
-            nLinComb[i+1].multiply(nActivity[i]).add(layerBiases[i]);
-            nActivity[i+1] = nLinComb[i+1].clone().map(sigmoid);
+            output.multiplyLeft(layerWeights[i]).add(layerBiases[i]);
+            output.map(sigmoid);
         }
 
-        return nActivity[nbLayers].clone();
+        return output;
     }
 
     public String toString() {
@@ -151,187 +92,5 @@ public class NeuralNetwork implements Serializable {
             s += "Biases " + i + "\n" + layerBiases[i] + "\n\n";
         }
         return s;
-    }
-
-/*******************************************************************************
-                            GRADIENT DESCENT LEARNING
-*******************************************************************************/
-    public void learn(LearningData learningData, int nbBatches) {
-        for(int i=0; i<nbBatches; i++) {
-            learnBatch(learningData);
-        }
-    }
-
-    public void learn(String dataPath, int nbBatches) {
-        LearningData learningData = new LearningData(dataPath);
-        learn(learningData, nbBatches);
-    }
-
-    public void learnStocha(LearningData learningData, int batchSize, int nbBatches) {
-        for(int i=0; i<nbBatches; i++) {
-            learnBatch(learningData.generateBatch(batchSize));
-        }
-    }
-
-    public void learnStocha(String dataPath, int batchSize, int nbBatches) {
-        LearningData learningData = new LearningData(dataPath);
-        learnStocha(learningData, batchSize, nbBatches);
-    }
-
-    /*
-    This function takes as input a two 2D array, for which each line
-    represents a traning data, and the output expecte on that training data
-    */
-    private void learnBatch(LearningData batch) {
-        Matrix[] data = batch.getData();
-        Matrix[] labels = batch.getLabels();
-        int batchSize = data.length;
-        Matrix[][] gradientsWeights = new Matrix[nbLayers][batchSize];
-        Matrix[][] gradientsBiases = new Matrix[nbLayers][batchSize];
-
-        // compute the gradient for each training data
-        for(int i=0; i<batchSize; i++) {
-            Matrix[][] gradient = learnOneData(data[i], labels[i]);
-            for(int j=0; j<nbLayers; j++) {
-                gradientsWeights[j][i] = gradient[0][j];
-                gradientsBiases[j][i] = gradient[1][j];
-            }
-        }
-
-        // compute the averageGradient on the batch
-        Matrix[] averageGradWeights = new Matrix[nbLayers];
-        Matrix[] averageGradBiases = new Matrix[nbLayers];
-        for(int i=0; i<nbLayers; i++) {
-            averageGradWeights[i] = Matrix.average(gradientsWeights[i]);
-            averageGradBiases[i] = Matrix.average(gradientsBiases[i]);
-        }
-
-        for(int i=0; i<nbLayers; i++) {
-            updateStep();
-            this.layerWeights[i].apply(averageGradWeights[i], makeStep);
-            this.layerBiases[i].apply(averageGradBiases[i], makeStep);
-        }
-    }
-
-    /*
-    This function returns the gradient of the data provided on the neural network
-    This the first being the dradient on the weights and the second being the
-    gradient on the Biases
-    */
-    private Matrix[][] learnOneData(Matrix inputs, Matrix label) {
-        Matrix[] wGrad = new Matrix[nbLayers];
-        Matrix[] bGrad = new Matrix[nbLayers];
-        Matrix outputs = propagate(inputs);
-
-        Matrix dCdA = outputs.clone();
-        dCdA.apply(label, costDerivative);
-
-        /* derivative with the parameters in back propagation:
-        // dz_i_l / dw_ij_(l-1) = a_j_(l-1)
-        // dz_i_l / db_i_(l-1) = 1
-
-        // dC / dw_ij_l = dC / da_i_(l+1) * da_i_(l+1) / dz_i_(l+1) * a_j_l
-        // dC / db_i_l  = dC / da_i_(l+1) * da_i_(l+1) / dz_i_(l+1) * 1
-        */
-        for(int i=nbLayers-1; i>=0; i--) {
-            // bias gradient
-            // dC / db_i_l = (dC / da_i_(l+1)) * (da_i_(l+1) / dz_i_(l+1)) * (dz_i_(l+1) / db_i_l)
-            // dC / db_i_l = dCdA * sigmoidDerivative(z_i_(l+1)) * 1
-            Matrix z_next = nLinComb[i+1];
-            Matrix a = nActivity[i];
-
-            Matrix dAdz = z_next.clone().map(sigmoidDerivative);
-            // update the dCdA and clone the result in bGrad
-            bGrad[i] = dCdA.dotMultiply(dAdz).clone();
-
-            /* weights gradient
-               dC / dw_ij_l = (dC / da_i_(l+1)) * (da_i_(l+1) / dz_i_(l+1)) * (dz_i_(l+1) / dw_ij_l)
-               dC / dw_ij_l = dCdA * sigmoidDerivative(z_i_(l+1)) * a_j_l
-               (n_l x 1) * (n_(l-1) x 1)T -> n_l x n_(l-1)
-            */
-            wGrad[i] = bGrad[i].clone().multiply(a.transpose());
-
-            /* dC / da_k_l
-            //    = sum_j[
-            //          (dC / da_j_(l+1))           -> previous layer
-            //        * (da_j_(l+1) / dz_j_(l+1))   -> sigmoidDerivative
-            //        * (dz_j_(l+1) / da_k_l)       -> matMultiply with nActivity
-            //    ]
-            */
-            //dCdA.dotMultiply(dAdz);
-            dCdA = layerWeights[i].clone().transpose().multiply(dCdA);
-            //dCdA.sum(1);
-            //System.out.println(dCdA.equals(bGrad[i].clone().transpose().multiply(layerWeights[i]).transpose()));
-            //dCdA = bGrad[i].clone();
-            //dCdA.transpose().multiply(layerWeights[i]).transpose();
-        }
-        Matrix[][] toReturn = {wGrad, bGrad};
-        return toReturn;
-    }
-
-    public double testAccuracy(LearningData batch) {
-        double accuracy = 0;
-        double averageCost = 0;
-        Matrix[] data = batch.getData();
-        Matrix[] labels = batch.getLabels();
-        for(int i=0; i<data.length; i++) {
-            Matrix output = propagate(data[i]);
-            int answer = output.maxIndex()[0];
-            int expected = labels[i].maxIndex()[0];
-            if(i==0) {
-                System.out.println("Expected : " + expected);
-                System.out.println(output);
-                //System.out.println(labels[i]);
-                //System.out.println(this);
-            }
-            averageCost += cost(output.transpose().getContent()[0], labels[i].transpose().getContent()[0]);
-            if(answer == expected) {
-                accuracy++;
-            }
-        }
-        averageCost /= data.length;
-        System.out.println("Average cost : " + averageCost + "\n");
-        accuracy /= data.length;
-        return accuracy;
-    }
-
-    private double cost(double[] results, double[] labels) {
-        if(results.length != labels.length) {
-            String errMsg = "The length of the two inputs is not the same (";
-            errMsg += results.length + ", " + labels.length + ")";
-            throw new IllegalArgumentException(errMsg);
-        }
-        double toReturn = 0;
-        for(int i=0; i<results.length; i++) {
-            toReturn += (labels[i] - results[i]) * (labels[i] - results[i]);
-        }
-        return toReturn / 2;
-    }
-
-
-/*******************************************************************************
-                                GENTETIC LEARNING
-*******************************************************************************/
-    public NeuralNetwork breed(NeuralNetwork nn) {
-        if(nbLayers != nn.nbLayers) {
-            throw new IllegalArgumentException
-            ("Error in NeuralNetwork.breed"
-            + " : The number of layers of the NeuralNetworks do not match");
-        }
-        for(int i=0; i<nbLayers+1; i++) {
-            if(dimensions[i] != nn.dimensions[i]) {
-                throw new IllegalArgumentException
-                ("Error in NeuralNetwork.breed"
-                + " : The dimensions the NeuralNetworks do not match");
-            }
-        }
-
-        NeuralNetwork newNN = this.clone();
-        for(int i=0; i<nn.nbLayers; i++) {
-            newNN.layerWeights[i].apply(nn.layerWeights[i], breedFunc);
-            newNN.layerBiases[i].apply(nn.layerBiases[i], breedFunc);
-        }
-
-        return newNN;
     }
 }

@@ -29,7 +29,7 @@ import java.lang.IllegalArgumentException;
 
 public class Genetics {
     private int generationSize;
-    private NeuralNetwork[] neuralNets;
+    private GeneticNeuralNetwork[] neuralNets;
     private Player[] players;
     private int coreLimit = 8;
     private int saveNb;
@@ -49,7 +49,7 @@ public class Genetics {
         this.dimensions = dimensions;
         this.game = game;
         nnpath = "bin/com/agents/NeuralNetParam-" + game + "/";
-        neuralNets = new NeuralNetwork[generationSize];
+        neuralNets = new GeneticNeuralNetwork[generationSize];
 
         int i=0;
 
@@ -80,7 +80,7 @@ public class Genetics {
         }
 
         for(; i<generationSize; i++){
-            neuralNets[i] = new NeuralNetwork(dimensions);
+            neuralNets[i] = new GeneticNeuralNetwork(dimensions);
         }
     }
 
@@ -100,7 +100,7 @@ public class Genetics {
             for(int i=0; i<nbNeuralNets; i++) {
                 FileInputStream fileIn = new FileInputStream(filePath[i]);
                 ObjectInputStream in = new ObjectInputStream(fileIn);
-                neuralNets[i] = (NeuralNetwork) in.readObject();
+                neuralNets[i] = (GeneticNeuralNetwork) in.readObject();
                 in.close();
                 fileIn.close();
             }
@@ -108,7 +108,7 @@ public class Genetics {
            i.printStackTrace();
            return;
         } catch (ClassNotFoundException c) {
-           System.out.println("NeuralNetwork class not found");
+           System.out.println("GeneticNeuralNetwork class not found");
            c.printStackTrace();
            return;
         }
@@ -173,7 +173,9 @@ public class Genetics {
         players = tour.play();
         // recover the neural networks
         for(int i=0; i<generationSize; i++) {
-            neuralNets[i] = ((NeuralEvaluation) players[i].getEvaluation()).getNeuralNet();
+            neuralNets[i] = (GeneticNeuralNetwork)
+                            ((NeuralEvaluation)
+                            players[i].getEvaluation()).getNeuralNet();
         }
         double[] results = tour.getResults();
 
@@ -185,7 +187,7 @@ public class Genetics {
     }
 
     private void breedGen(double[] results) {
-        NeuralNetwork[] newGen = new NeuralNetwork[generationSize];
+        GeneticNeuralNetwork[] newGen = new GeneticNeuralNetwork[generationSize];
         int nbSurvivors = generationSize/4;
         // compute the total of the results for the breeding proba;
         double resTot = 0;
@@ -202,11 +204,11 @@ public class Genetics {
         neuralNets = newGen;
     }
 
-    private NeuralNetwork breedOne(double[] results, double resTot, Random rand) {
+    private GeneticNeuralNetwork breedOne(double[] results, double resTot, Random rand) {
         double r1 = rand.nextDouble() * resTot;
         double r2 = rand.nextDouble() * resTot;
-        NeuralNetwork nn1 = null;
-        NeuralNetwork nn2 = null;
+        GeneticNeuralNetwork nn1 = null;
+        GeneticNeuralNetwork nn2 = null;
         double tmp = 0;
         for(int i=0; i<neuralNets.length; i++) {
             tmp += results[i];

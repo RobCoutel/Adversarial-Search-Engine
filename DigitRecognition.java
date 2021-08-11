@@ -20,20 +20,17 @@ import com.matrix.*;
 
 
 public class DigitRecognition {
-    public static void saveNN(NeuralNetwork nn, String path) {
+    public static final String nnPath = "bin/DigitNeuralNet/";
+
+    public static void saveNN(LearningNeuralNetwork nn, String path) {
         try {
             Date date = new Date();
-            String fullPath = path + "Generation-" + Long.toString((date.getTime()/1000)%31536000) + "/";
-            File f1 = new File(fullPath);
-            if(!f1.mkdir()) {
-                System.out.println(fullPath);
-                System.out.println("!!!!!!!!!!!!!!!!!!\nFILE FAILED TO BE CREATED\n!!!!!!!!!!!!!!!!!!!");
-            }
-            FileWriter myWriter = new FileWriter(path + "lastGeneration.txt");
+            String fullPath = path + nnPath;
+            fullPath += "NeuralNet-" + Long.toString((date.getTime()/1000)%31536000) + ".ser";
+            FileWriter myWriter = new FileWriter(path + nnPath + "lastNeuralNet.txt");
             myWriter.write(fullPath);
             myWriter.close();
 
-            fullPath += "NeuralNet";
             FileOutputStream fileOut = new FileOutputStream(fullPath);
             ObjectOutputStream out = new ObjectOutputStream(fileOut);
             out.writeObject(nn);
@@ -43,15 +40,20 @@ public class DigitRecognition {
             i.printStackTrace();
         }
     }
+
+    public static NeuralNetwork loadNN() {
+        return null;
+    }
+
     public static void main(String[] args) {
-        NeuralNetwork nn;
+        LearningNeuralNetwork nn;
         LearningData data;
         int nbBatches, nbIteration, batchSize;
         if(args.length == 0 || Integer.parseInt(args[0]) == 0) {
             int[] dimensions = {784, 10, 10, 10};
 
             String path = "mnist_train_small.csv";
-            nn = new NeuralNetwork(dimensions);
+            nn = new LearningNeuralNetwork(dimensions);
             data = new LearningData(path);
 
             nbBatches = 2000;
@@ -69,7 +71,7 @@ public class DigitRecognition {
             weights[0] = new Matrix(weightsArray);
             biases[0] = new Matrix(biasesArray);
             nn = new NeuralNetwork(weights, biases);*/
-            nn = new NeuralNetwork(dimensions);
+            nn = new LearningNeuralNetwork(dimensions);
 
             /*double[] input0 = {0};
             System.out.println("Output 0 : " + nn.propagate(new Matrix(input0)));
@@ -78,7 +80,7 @@ public class DigitRecognition {
 
             data = new LearningData(path);
 
-            nbBatches = 10000;
+            nbBatches = 1000;
             nbIteration = 10;
             batchSize = 20;
         }
@@ -87,7 +89,7 @@ public class DigitRecognition {
 
         for(int i=0; i<nbIteration; i++) {
             nn.learnStocha(data, batchSize, nbBatches);
-            System.out.println("Accuracy after training  " + i + " : "
+            System.out.println("Accuracy after training  " + i*nbBatches + " : "
              + nn.testAccuracy(data.generateBatch(batchSize)));
         }
 
