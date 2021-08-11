@@ -133,6 +133,7 @@ public class Matrix implements Serializable {
         return this;
     }
 
+    // multiply this * mat
     public Matrix multiply(Matrix mat) {
         if(width != mat.height) {
             String errMsg = "Error in Matrix.multiply : The dimensions of the matrices do not match\n";
@@ -153,6 +154,30 @@ public class Matrix implements Serializable {
         }
         content = product;
         width = newWidth;
+        return this;
+    }
+
+    // multiply mat * this
+    public Matrix multiplyLeft(Matrix mat) {
+        if(mat.width != height) {
+            String errMsg = "Error in Matrix.multiply : The dimensions of the matrices do not match\n";
+            errMsg += "The origin matrix is " + Integer.toString(height) + "x" + Integer.toString(width);
+            errMsg += " and the other is " + Integer.toString(mat.height) + "x" + Integer.toString(mat.width);
+            throw new IllegalArgumentException(errMsg);
+        }
+
+        int newHeight = mat.height;
+        int newWidth = width;
+        double[] product = new double[newHeight*newWidth];
+        for(int i=0; i<newHeight; i++) {
+            for(int j=0; j<newWidth; j++) {
+                for(int k=0; k<height; k++) {
+                    product[i*newWidth+j] += content[k*width+j] * mat.content[i*mat.width+k];
+                }
+            }
+        }
+        content = product;
+        height = newHeight;
         return this;
     }
 
@@ -351,9 +376,12 @@ public class Matrix implements Serializable {
     }
 
     public static void main(String[] args) {
-        double[][] content = {{1,2,3},{4,5,6}};
-        Matrix mat = new Matrix(content);
-        System.out.println(mat);
-        System.out.println(mat.transpose());
+        // 1 2   1
+        // 4 5   2
+        double[][] content1 = {{1,2},{4,5}};
+        double[] content2 = {1, 2};
+        Matrix mat1 = new Matrix(content1);
+        Matrix mat2 = new Matrix(content2);
+        System.out.println(mat2.multiplyLeft(mat1));
     }
 }
