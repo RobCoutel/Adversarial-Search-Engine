@@ -67,6 +67,11 @@ public interface Board {
     public String positionID();
 
     /*
+    This function returns a hash number to represent the board in a transposition table
+    */
+    public Long toHash();
+
+    /*
     When this function is called, the board will be printed after each move
     */
     public void activatePrint();

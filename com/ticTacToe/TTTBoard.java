@@ -194,6 +194,16 @@ public class TTTBoard implements Board {
         return s;
     }
 
+    public Long toHash() {
+        long hash = 0;
+        long base = 1;
+        for(int i=0; i<9; i++) {
+            hash += base*(board[i]+1);
+            base *= 3;
+        }
+        return Long.valueOf(hash);
+    }
+
     public void activatePrint() { printGame = true; }
 
     public void silentMode() { printGame = false; }

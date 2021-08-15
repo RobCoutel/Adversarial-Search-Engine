@@ -32,3 +32,5 @@ bin/DigitNeuralNet/lastNeuralNet.txt
 Test 1 trace.txt
 bin/com/agents/NeuralNetParam-TicTacToe/lastGeneration.txt
 bin/DigitNeuralNet/lastNeuralNet.txt
+*.txt
+bin/com/agents/NeuralNetParam-TicTacToe/lastGeneration.txt

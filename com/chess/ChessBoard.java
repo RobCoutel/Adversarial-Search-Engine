@@ -1071,7 +1071,7 @@ public class ChessBoard implements Board {
     public static int getRank(int index) { return index/size; }
     public static int getFile(int index) { return index%size; }
 
-    private Long toHash() {
+    public Long toHash() {
         long toReturn = 0;
         long nbBlank = 0;
         long base = 127;
