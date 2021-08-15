@@ -37,9 +37,9 @@ What will be added soon :
 
 How does the project work
  - The project works on a bash terminal with java vresion : openjdk 11.0.9 2020-10-20
- - Every command is inputed in the terminal on the directory /GameEngine
+ - Every command is inputted in the terminal on the directory /Adversarial-Seach-Engine$
  - To compile the files, we use $ ./make.sh
- - To execute the main functions, at the top the the file, there is the command line we use with the arguments
+ - To execute the main functions, at the top the file, there is the command line we use with the arguments
 
 The main functions are located in :
  - com.chess.Chess.java             to play a game of chess between agents
