@@ -7,6 +7,8 @@ Author : Robin Coutelier
 Co-author : Gilles Pirenne
 ------------------------------------------------------------------------------*/
 
+//lichess.org/games/export/RobCoutel?since=1627304400000
+
 /*------------------------------------------------------------------------------
 ---- Class Description ----
 Board.java is the center part of the implementation fo the rules of chess.
@@ -106,12 +108,6 @@ Methods :
             Vector<Move> legalMoves : A vector containing all the legal moves
                             available from the current position of the board.
 
-    Move getLastMove()
-        Arguments :
-            void
-        Return :
-            Move lastMove : The last instance of Move played on the board
-
     int getTurn()
         Arguments :
             void
@@ -183,6 +179,7 @@ package com.chess;
 import com.gameEngine.*;
 
 import java.util.Vector;
+import java.util.Stack;
 import java.util.HashMap;
 import java.lang.IllegalArgumentException;
 
@@ -276,26 +273,29 @@ public class ChessBoard implements Board {
                               INSTANCE VARIABLES
 ------------------------------------------------------------------------------*/
     private Player[] players;
-
-    private int[] pieces;
-    private int [] kingIndex;
-    private int[] whiteControls, blackControls;
-
-    private boolean[] castlingRights;
     private int turn;
 
-    private int nbMovesNoTake = 0;
+    protected int[] pieces;
+    protected int[] kingIndex;
+    protected int[] whiteControls, blackControls;
+    protected boolean[] castlingRights;
+    protected Vector<Move> legalMoves;
+    protected int nbMovesNoTake = 0;
+    protected int nbMoves = 2;
+    protected int enPassantIndex = -1;
+    protected HashMap<Long, Integer> playedPositions;
 
-    private MoveStack moves;
-    private Vector<Move> legalMoves;
-    private HashMap<Long, Integer> playedPositions;
+
+    private Stack<BoardState> stateStack;
+
     private boolean isDraw = false;
 
     private String startingPosition;
-    private int moveNumber;
 
     private int result = 2;
     private boolean computedResult = false;
+    private boolean computedLegalMoves = false;
+    private boolean computedControl = false;
 
 /*------------------------------------------------------------------------------
                                  CONSTRUCTORS
@@ -305,19 +305,27 @@ public class ChessBoard implements Board {
     }
 
     public ChessBoard(Player white, Player black) {
-        construct("RNBQKBNR/PPPPPPPP/8/8/8/8/pppppppp/rnbqkbnr/11110 null", white, black);
+        construct("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", white, black);
+    }
+
+    private ChessBoard(Player white, Player black, BoardState boardState) {
+        players = new Player[2];
+        kingIndex = new int[2];
+        stateStack = new Stack<BoardState>();
+        players[0] = white;
+        players[1] = black;
+        boardState.recoverBoardState(this);
     }
 
     private void construct(String boardID, Player white, Player black) {
         startingPosition = boardID;
 
-        moveNumber = 0;
-
         players = new Player[2];
         players[0] = white;
         players[1] = black;
 
-        moves = new MoveStack();
+        stateStack = new Stack<BoardState>();
+
         pieces = new int[nbSquares];
 
         kingIndex = new int[2];
@@ -325,7 +333,6 @@ public class ChessBoard implements Board {
 
         whiteControls = new int[nbSquares];
         blackControls = new int[nbSquares];
-        resetControl();
 
         legalMoves = new Vector<Move>();
 
@@ -333,26 +340,20 @@ public class ChessBoard implements Board {
         playedPositions = new HashMap<Long, Integer>(initialCapacity);
         incrementInHashMap();
 
-        this.updateControl();
-        this.updateLegalMoves();
+        updateLegalMoves();
     }
 
     public ChessBoard clone() {
-        ChessBoard clone = new ChessBoard(this.positionID(), players[0], players[1]);
-        clone.nbMovesNoTake = this.nbMovesNoTake;
-        clone.moveNumber = this.moveNumber + 1;
-        // remove the wrong last move of the clone
-        clone.moves.pop();
-        // clone the last move - can't reconstruct it only from string
-        ChessMove lastMove = moves.top();
-        if(lastMove != null) {
-            clone.moves.push(lastMove.clone(clone));
+        ChessBoard clone = new ChessBoard(players[0], players[1], new BoardState(this));
+        clone.nbMoves = this.nbMoves;
+        clone.turn = this.turn;
+
+        // clone the last state of the stateStack
+        if(!stateStack.isEmpty()) {
+            clone.stateStack.push(stateStack.peek());
         }
 
         clone.playedPositions = new HashMap<Long, Integer>(playedPositions);
-
-        clone.updateControl();
-        clone.updateLegalMoves();
         return clone;
     }
 
@@ -362,11 +363,10 @@ public class ChessBoard implements Board {
     public void play() {
         while(gameOver() == 2) {
             if(printGame) {
+                System.out.println(positionID());
                 System.out.println(this);
                 System.out.println(players[turn].getName() + " to play!");
             }
-            moveNumber += 1;
-
             ChessMove toPlay;
 
             long startTime = System.currentTimeMillis();
@@ -383,16 +383,12 @@ public class ChessBoard implements Board {
                 + s);
             }
             if(toPlay == null) {
-                try {
-                    Thread.sleep(100);
-                } catch(Exception e){}
-                continue;
+                toPlay = new ChessMove(this, "resign");
             }
-            //System.out.println("Move played : " + toPlay);
             move(toPlay.clone(this));
-            //try{Thread.sleep(10);} catch(Exception e){}
         }
         if(printGame) {
+            System.out.println(positionID());
             System.out.println(this);
             int result = gameOver();
             if(result == 1) {
@@ -408,126 +404,148 @@ public class ChessBoard implements Board {
     }
 
     public void move(Move toPlay) {
+        move(toPlay, true);
+    }
+
+    private void move(Move toPlay, boolean updateLegalMoves) {
         if(toPlay == null) {
             throw new IllegalArgumentException("Error in ChessBoard.move :"
             + " The move provided was null");
         }
-        if(toPlay.isResignation()) {
-            result = turn==0? -1 : 1;
-            computedResult = true;
-            return;
-        }
+        // save the current state of the board before playing the move
+        stateStack.push(new BoardState(this));
 
         ChessMove move = (ChessMove) toPlay;
-        int moveType = move.moveType();
-        switch(moveType) {
-            case ChessMove.SHORT_CASTLE :
-                pieces[e + turn*56] = UNDEFINED;
-                pieces[f + turn*56] = ROOK + turn*BLACK;
-                pieces[g + turn*56] = KING + turn*BLACK;
-                pieces[h + turn*56] = UNDEFINED;
-                kingIndex[turn] = g + turn*56;
-                break;
-
-            case ChessMove.LONG_CASTLE :
-                pieces[e + turn*56] = UNDEFINED;
-                pieces[d + turn*56] = ROOK + turn*BLACK;
-                pieces[c + turn*56] = KING + turn*BLACK;
-                pieces[a + turn*56] = UNDEFINED;
-                kingIndex[turn] = c + turn*56;
-                break;
-
-            case ChessMove.PROMOTION :
-                pieces[move.getOrigin()] = UNDEFINED;
-                pieces[move.getDestination()] = move.getPromoted();
-                break;
-
-            case ChessMove.EN_PASSANT :
-                pieces[move.getDestination()] = move.getMoving();
-                pieces[move.getOrigin()] = UNDEFINED;
-                int takenIndex = move.getDestination() + ((turn==0)?-8:+8);
-                pieces[takenIndex] = UNDEFINED;
-                break;
-            default :
-                pieces[move.getDestination()] = move.getMoving();
-                pieces[move.getOrigin()] = UNDEFINED;
-                if(move.getMoving()%BLACK == KING) {
-                    kingIndex[turn] = move.getDestination();
-                }
+        makeMove(move);
+        if(move.isPawnPush2()) {
+            enPassantIndex = move.getDestination() + (turn==0? -8 : 8);
         }
+        else { enPassantIndex = -1; }
+        turn = 1 - turn;
 
-        int taken = move.getTaken();
-        int moving = move.getMoving();
-
-        // save castlingRights and number of moves without take of push
-        move.setPreviousCastlingRights((boolean[]) castlingRights.clone());
-        move.setPreviousNbMovesNoTake(nbMovesNoTake);
-
-
-        moves.push(move);
-        updateCastlingRights();
-
-        if(taken == UNDEFINED && moving%BLACK != PAWN) {
+        if(move.getTaken() == UNDEFINED
+        && move.getMoving()%BLACK != PAWN) {
             nbMovesNoTake++;
         }
         else {
             nbMovesNoTake = 0;
+            playedPositions.clear();
         }
-        turn = 1 - turn;
-        updateControl();
+
+        computedResult = false;
+        computedControl = false;
+        computedLegalMoves = false;
 
         // update HashMap
         incrementInHashMap();
-        computedResult = false;
-    }
 
-    public int getMoveNumber(){ return moveNumber; }
+        // update the derived state of the board
+        updateCastlingRights();
+        updateControl();
+        // does not update while in recursive call (updateLegalMoves->addMove->move)
+        // to prevent infinite recursion
+        if(updateLegalMoves) {
+            updateLegalMoves();
+        }
+        nbMoves++;
+    }
 
     public void undo() {
-        // update HashMap
-        decrementInHashMap();
-        ChessMove lastMove = moves.pop();
         turn = 1 - turn;
-        int moveType = lastMove.moveType();
-        switch(moveType) {
-            case ChessMove.SHORT_CASTLE :
-                pieces[e + turn*56] = KING + turn*BLACK;
-                pieces[f + turn*56] = UNDEFINED;
-                pieces[g + turn*56] = UNDEFINED;
-                pieces[h + turn*56] = ROOK + turn*BLACK;
-                kingIndex[turn] = e + turn*56;
-                break;
+        // recover the derived state of the board
+        stateStack.pop().recoverBoardState(this);
 
-            case ChessMove.LONG_CASTLE :
-                pieces[e + turn*56] = KING + turn*BLACK;
-                pieces[d + turn*56] = UNDEFINED;
-                pieces[c + turn*56] = UNDEFINED;
-                pieces[a + turn*56] = ROOK + turn*BLACK;
-                kingIndex[turn] = e + turn*56;
-                break;
-
-            case ChessMove.EN_PASSANT :
-                pieces[lastMove.getDestination()] = UNDEFINED;
-                pieces[lastMove.getOrigin()] = lastMove.getMoving();
-                int takenIndex = lastMove.getDestination() + ((turn==0)?-8:+8);
-                pieces[takenIndex] = lastMove.getTaken();
-                break;
-
-            default :
-                pieces[lastMove.getDestination()] = lastMove.getTaken();
-                pieces[lastMove.getOrigin()] = lastMove.getMoving();
-                if(lastMove.getMoving()%BLACK == KING) {
-                    kingIndex[turn] = lastMove.getOrigin();
-                }
-        }
-        // recover castling rights and number of moves withou take of push
-        castlingRights = lastMove.getPreviousCastlingRights();
-        nbMovesNoTake = lastMove.getPreviousNbMovesNoTake();
-        updateControl();
+        computedResult = false;
+        computedLegalMoves = true;
+        computedControl = true;
+        nbMoves--;
     }
 
-    public void updateLegalMoves() {
-        legalMoves.clear();
+    public Vector<Move> getLegalMoves() {
+        if(!computedLegalMoves) {
+            updateLegalMoves();
+        }
+        return new Vector<Move>(legalMoves);
+    }
+
+    public int gameOver() {
+        if(computedResult) { return result; }
+        updateLegalMoves();
+        if(legalMoves.isEmpty()) {
+            if(isCheck(turn)) {
+                result = turn == 0 ? -1 : 1;
+            }
+            else {
+                result = 0;
+            }
+        }
+        else if(nbMovesNoTake >= 100) {
+            // 50 moves without take
+            result = 0;
+        }
+        else if(isDraw) {
+            // 3 fold repetition
+            result = 0;
+        }
+        else {
+            // game not over
+            result = 2;
+        }
+        computedResult = true;
+        return result;
+    }
+
+/*------------------------------------------------------------------------------
+                            SIDE FUNCTIONS
+------------------------------------------------------------------------------*/
+    /* -----  Moving pieces  ----- */
+    private void makeMove(ChessMove move) {
+    if(move.isResignation()) {
+        result = turn==0 ? -1 : 1;
+        computedResult = true;
+        return;
+    }
+
+    int moveType = move.moveType();
+    switch(moveType) {
+        case ChessMove.SHORT_CASTLE :
+            pieces[e + turn*56] = UNDEFINED;
+            pieces[f + turn*56] = ROOK + turn*BLACK;
+            pieces[g + turn*56] = KING + turn*BLACK;
+            pieces[h + turn*56] = UNDEFINED;
+            kingIndex[turn] = g + turn*56;
+            break;
+        case ChessMove.LONG_CASTLE :
+            pieces[e + turn*56] = UNDEFINED;
+            pieces[d + turn*56] = ROOK + turn*BLACK;
+            pieces[c + turn*56] = KING + turn*BLACK;
+            pieces[a + turn*56] = UNDEFINED;
+            kingIndex[turn] = c + turn*56;
+            break;
+        case ChessMove.PROMOTION :
+            pieces[move.getOrigin()] = UNDEFINED;
+            pieces[move.getDestination()] = move.getPromoted();
+            break;
+        case ChessMove.EN_PASSANT :
+            pieces[move.getDestination()] = move.getMoving();
+            pieces[move.getOrigin()] = UNDEFINED;
+            int takenIndex = move.getDestination() + ((turn==0)?-8:+8);
+            pieces[takenIndex] = UNDEFINED;
+            break;
+        default :
+            pieces[move.getDestination()] = move.getMoving();
+            pieces[move.getOrigin()] = UNDEFINED;
+            if(move.getMoving()%BLACK == KING) {
+                kingIndex[turn] = move.getDestination();
+            }
+    }
+}
+
+    /* -----  Updating legal moves  ----- */
+    private void updateLegalMoves() {
+        if(computedLegalMoves) { return; }
+        if(!computedControl) { updateControl(); }
+        legalMoves = new Vector<Move>();
         int piece;
         for(int i=0; i<nbSquares; i++) {
             piece = pieces[i];
@@ -535,262 +553,183 @@ public class ChessBoard implements Board {
                 updateLegalMovesUnique(i);
             }
         }
+        computedLegalMoves = true;
     }
 
     private void updateLegalMovesUnique(int index) {
         int piece = pieces[index];
-        int rank = getRank(index);
-        int file = getFile(index);
         switch(piece%BLACK) {
             case KING :
-                // normal move
-                for(int i=-1; i<=1; i++) {
-                    for(int j=-1; j<=1; j++) {
-                        if(j == 0 && i == 0) { continue; }
-                        addMove(new ChessMove(this, index, square(file+i, rank+j)));
-                    }
-                }
-                // short castle
-                int[] control = turn==0? blackControls : whiteControls;
-                if(castlingRights[2*turn]
-                 && pieces[index+1] == UNDEFINED
-                 && pieces[index+2] == UNDEFINED
-                 && control[index] == 0 // is check?
-                 && control[index+1] == 0
-                 && control[index+2] == 0) {
-                     addMove(new ChessMove(this, "0-0"));
-                }
-                // long castle
-                if(castlingRights[2*turn+1]
-                 && pieces[index-1] == UNDEFINED
-                 && pieces[index-2] == UNDEFINED
-                 && pieces[index-3] == UNDEFINED
-                 && control[index] == 0 // is check?
-                 && control[index-1] == 0
-                 && control[index-2] == 0) {
-                     addMove(new ChessMove(this, "0-0-0"));
-                }
+                kingMove(index);
                 break;
             case QUEEN :
-                // diagonal slide
-                slideMove(index, 1, 1);
-                slideMove(index, 1, -1);
-                slideMove(index, -1, 1);
-                slideMove(index, -1, -1);
+                bishopMove(index);
                 // no break on purpose
-
             case ROOK :
-                // horizontal slide
-                slideMove(index, 0, 1);
-                slideMove(index, 0, -1);
-                // vertical slide
-                slideMove(index, 1, 0);
-                slideMove(index, -1, 0);
+                rookMove(index);
                 break;
             case BISHOP :
-                // diagonal slide
-                slideMove(index, 1, 1);
-                slideMove(index, 1, -1);
-                slideMove(index, -1, 1);
-                slideMove(index, -1, -1);
+                bishopMove(index);
                 break;
-
             case KNIGHT :
-                addMove(new ChessMove (this, index, square(file + 2, rank + 1)));
-                addMove(new ChessMove (this, index, square(file + 2, rank - 1)));
-                addMove(new ChessMove (this, index, square(file - 2, rank + 1)));
-                addMove(new ChessMove (this, index, square(file - 2, rank - 1)));
-                addMove(new ChessMove (this, index, square(file + 1, rank + 2)));
-                addMove(new ChessMove (this, index, square(file + 1, rank - 2)));
-                addMove(new ChessMove (this, index, square(file - 1, rank + 2)));
-                addMove(new ChessMove (this, index, square(file - 1, rank - 2)));
+                knightMove(index);
                 break;
-
             case PAWN :
-                int direction = -1;
-                int startRank = 6;
-                int promotionRank = 1;
-                if(turn == 0) {
-                    direction = 1;
-                    startRank = 1;
-                    promotionRank = 6;
-                }
-                rank = getRank(index);
-                file = getFile(index);
-                // promotions
-                if(rank == promotionRank) {
-                    int dest = square(file, rank+direction);
-                    if(dest >= 0 && pieces[dest] == UNDEFINED) {
-                        promotion(index, dest);
-                    }
-                    dest = square(file-1, rank+direction);
-                    // take left
-                    if(dest >= 0
-                    && pieces[dest] != UNDEFINED
-                    && pieces[dest]/BLACK != turn) {
-                        promotion(index, dest);
-                    }
-                    // take right
-                    dest = square(file+1, rank+direction);
-                    if(dest >= 0
-                    && pieces[dest] != UNDEFINED
-                    && pieces[dest]/BLACK != turn) {
-                        promotion(index, dest);
-                    }
-                }
-                else {
-                    int dest = square(file, rank+direction);
-                    // pushing
-                    if(dest>= 0 && pieces[dest] == UNDEFINED) {
-                        addMove(new ChessMove(this, index, square(file, rank + direction)));
-                        if (rank == startRank
-                        && pieces[square(file, rank+2*direction)] == UNDEFINED) {
-                            addMove(new ChessMove(this, index, square(file, rank + 2*direction)));
-                        }
-                    }
-                    // take left
-                    pawnTake(index, square(file-1, rank+direction));
-                    // take right
-                    pawnTake(index, square(file+1, rank+direction));
-                    // en passant left
-                    enPassant(index, square(file-1, rank+direction));
-                    // en passant right
-                    enPassant(index, square(file+1, rank+direction));
-                }
+                pawnMove(index);
                 break;
-
             default:
                 System.out.println("Waring (updateLegalMoves) : unrecognized piece (" + (piece%BLACK) + ")");
         }
     }
 
-    public void updateControl() {
-        resetControl();
-        int piece;
-        for(int i=0; i<nbSquares; i++) {
-            piece = pieces[i];
-            if(piece != UNDEFINED) {
-                updateControlUnique(piece/BLACK, i);
-            }
-        }
-    }
-
-    private void updateControlUnique(int player, int index) {
-        int piece = pieces[index];
+    private void kingMove(int index) {
         int rank = getRank(index);
         int file = getFile(index);
-        switch(piece%BLACK) {
-            case KING :
-            // normal move
-            for(int i=-1; i<=1; i++) {
-                for(int j=-1; j<=1; j++) {
-                    if(j == 0 && i == 0) { continue; }
-                    addControl(player, square(file+i, rank+j));
+        int[] control = turn==0? blackControls : whiteControls;
+        // normal move
+        for(int i=-1; i<=1; i++) {
+            for(int j=-1; j<=1; j++) {
+                int dest = square(file+i, rank+j);
+                if((j == 0 && i == 0)
+                || dest < 0 || dest > nbSquares
+                || control[dest] > 0) {
+                    continue;
+                }
+                addMove(new ChessMove(this, index, dest));
+            }
+        }
+        // short castle
+        if(castlingRights[2*turn]
+        && pieces[index+1] == UNDEFINED
+        && pieces[index+2] == UNDEFINED
+        && control[index] == 0 // is check?
+        && control[index+1] == 0
+        && control[index+2] == 0) {
+            addMove(new ChessMove(this, "0-0"));
+        }
+        // long castle
+        if(castlingRights[2*turn+1]
+        && pieces[index-1] == UNDEFINED
+        && pieces[index-2] == UNDEFINED
+        && pieces[index-3] == UNDEFINED
+        && control[index] == 0 // is check?
+        && control[index-1] == 0
+        && control[index-2] == 0) {
+            addMove(new ChessMove(this, "0-0-0"));
+        }
+    }
+
+    private void rookMove(int index) {
+        slideMove(index, 0, 1);
+        slideMove(index, 0, -1);
+        slideMove(index, 1, 0);
+        slideMove(index, -1, 0);
+    }
+
+    private void bishopMove(int index) {
+        slideMove(index, 1, 1);
+        slideMove(index, 1, -1);
+        slideMove(index, -1, 1);
+        slideMove(index, -1, -1);
+    }
+
+    private void knightMove(int index) {
+        int rank = getRank(index);
+        int file = getFile(index);
+        addMove(new ChessMove (this, index, square(file + 2, rank + 1)));
+        addMove(new ChessMove (this, index, square(file + 2, rank - 1)));
+        addMove(new ChessMove (this, index, square(file - 2, rank + 1)));
+        addMove(new ChessMove (this, index, square(file - 2, rank - 1)));
+        addMove(new ChessMove (this, index, square(file + 1, rank + 2)));
+        addMove(new ChessMove (this, index, square(file + 1, rank - 2)));
+        addMove(new ChessMove (this, index, square(file - 1, rank + 2)));
+        addMove(new ChessMove (this, index, square(file - 1, rank - 2)));
+    }
+
+    private void pawnMove(int index) {
+        int rank = getRank(index);
+        int file = getFile(index);
+        int direction     = turn==0 ? 1 : -1;
+        int startRank     = turn==0 ? 1 : 6;
+        int promotionRank = turn==0 ? 6 : 1 ;
+        rank = getRank(index);
+        file = getFile(index);
+        // promotions
+        if(rank == promotionRank) {
+            int dest = square(file, rank+direction);
+            if(dest >= 0 && pieces[dest] == UNDEFINED) {
+                promotion(index, dest);
+            }
+            dest = square(file-1, rank+direction);
+            // take left
+            if(dest >= 0
+            && pieces[dest] != UNDEFINED
+            && pieces[dest]/BLACK != turn) {
+                promotion(index, dest);
+            }
+            // take right
+            dest = square(file+1, rank+direction);
+            if(dest >= 0
+            && pieces[dest] != UNDEFINED
+            && pieces[dest]/BLACK != turn) {
+                promotion(index, dest);
+            }
+        }
+        else {
+            int dest = square(file, rank+direction);
+            // pushing
+            if(dest>= 0 && pieces[dest] == UNDEFINED) {
+                addMove(new ChessMove(this, index, square(file, rank + direction)));
+                if (rank == startRank
+                && pieces[square(file, rank+2*direction)] == UNDEFINED) {
+                    addMove(new ChessMove(this, index, square(file, rank + 2*direction)));
                 }
             }
-            break;
-            case QUEEN :
-            // diagonal slide
-            slideControl(player, index, 1, 1);
-            slideControl(player, index, 1, -1);
-            slideControl(player, index, -1, 1);
-            slideControl(player, index, -1, -1);
-            // no break on purpose
-
-            case ROOK :
-            // horizontal slide
-            slideControl(player, index, 0, 1);
-            slideControl(player, index, 0, -1);
-            // vertical slide
-            slideControl(player, index, 1, 0);
-            slideControl(player, index, -1, 0);
-            break;
-            case BISHOP :
-            // diagonal slide
-            slideControl(player, index, 1, 1);
-            slideControl(player, index, 1, -1);
-            slideControl(player, index, -1, 1);
-            slideControl(player, index, -1, -1);
-            break;
-
-            case KNIGHT :
-            addControl(player, square(file + 2, rank + 1));
-            addControl(player, square(file + 2, rank - 1));
-            addControl(player, square(file - 2, rank + 1));
-            addControl(player, square(file - 2, rank - 1));
-            addControl(player, square(file + 1, rank + 2));
-            addControl(player, square(file + 1, rank - 2));
-            addControl(player, square(file - 1, rank + 2));
-            addControl(player, square(file - 1, rank - 2));
-            break;
-            case PAWN :
-            int direction = player==0 ? 1 : -1;
-            addControl(player, square(file+1, rank+direction));
-            addControl(player, square(file-1, rank+direction));
-            break;
-            default:
-            System.out.println("Waring (updateControl) : unrecognized piece (" + (piece%BLACK) + ")");
+            // take left
+            pawnTake(index, square(file-1, rank+direction));
+            // take right
+            pawnTake(index, square(file+1, rank+direction));
+            if(rank == 4 - turn && enPassantIndex != -1) {
+                // en passant left
+                enPassant(index, square(file-1, rank+direction));
+                // en passant right
+                enPassant(index, square(file+1, rank+direction));
+            }
         }
     }
 
-    public int gameOver() {
-        if(computedResult) {
-            return result;
+    private void pawnTake(int index, int dest) {
+        if(dest >= 0
+           && pieces[dest] != UNDEFINED
+           && pieces[dest]/BLACK != turn) {
+            addMove(new ChessMove(this, index, dest));
         }
-
-        updateLegalMoves();
-        updateControl();
-        if(legalMoves.isEmpty()) {
-            if(isCheck(turn)) {
-                if(debug) {
-                    System.out.println("Checkmate");
-                }
-                result = turn == 0 ? -1 : 1;
-                return result;
-            }
-            if(debug) {
-                System.out.println("Stale mate");
-            }
-            result = 0;
-            return result;
-        }
-        // 50 moves without take
-        if(nbMovesNoTake >= 50) {
-            if(debug) {
-                System.out.println("50 moves without taking");
-            }
-            result = 0;
-            return result;
-        }
-        // 3 fold repetition
-        if(isDraw) {
-            if(debug) {
-                System.out.println("3 fold repetition");
-            }
-            result = 0;
-            return result;
-        }
-        // game not over
-        result = 2;
-        return result;
     }
 
-    public void replay(int timeBetweenMoves) {
-        boardInit(startingPosition);
-        System.out.println("Replay");
-        while (!moves.reachedHead()) {
-            move(moves.head().clone(this));
-            try {
-              Thread.sleep(timeBetweenMoves);
-            } catch(Exception e){}
-            moves.pop();
+    private void enPassant(int index, int dest) {
+        if(dest >= 0 && dest<nbSquares && dest == enPassantIndex) {
+            ChessMove newMove = new ChessMove(this, index, dest);
+            newMove.enPassant();
+            addMove(newMove);
         }
-        moves.resetHead();
     }
 
-/*------------------------------------------------------------------------------
-                            SIDE FUNCTIONS
-------------------------------------------------------------------------------*/
+    private void promotion(int origin, int destination) {
+        ChessMove move;
+        move = new ChessMove(this, origin, destination);
+        move.setPromotion(QUEEN + turn*BLACK);
+        addMove(move);
+        move = new ChessMove(this, origin, destination);
+        move.setPromotion(ROOK + turn*BLACK);
+        addMove(move);
+        move = new ChessMove(this, origin, destination);
+        move.setPromotion(BISHOP + turn*BLACK);
+        addMove(move);
+        move = new ChessMove(this, origin, destination);
+        move.setPromotion(KNIGHT + turn*BLACK);
+        addMove(move);
+    }
+
     private void slideMove(int currIndex, int fileInc, int rankInc) {
         int piece = pieces[currIndex];
         int currFile = getFile(currIndex);
@@ -818,46 +757,6 @@ public class ChessBoard implements Board {
         }
     }
 
-    private void pawnTake(int index, int dest) {
-        if(dest >= 0
-           && pieces[dest] != UNDEFINED
-           && pieces[dest]/BLACK != turn) {
-            addMove(new ChessMove(this, index, dest));
-        }
-    }
-
-    private void enPassant(int index, int dest) {
-        if(dest < 0 || getRank(index) != 4 - turn) {
-            return;
-        }
-        int destFile = getFile(dest);
-        int takenIndex = dest + (turn==0? -8:8);
-        if(takenIndex >= 0
-           && pieces[takenIndex] == PAWN + (1 - turn)*BLACK
-           && !moves.isEmpty()
-           && moves.top().isPawnPush2(destFile)) {
-            ChessMove newMove = new ChessMove(this, index, dest);
-            newMove.enPassant();
-            addMove(newMove);
-        }
-    }
-
-    private void promotion(int origin, int destination) {
-        ChessMove move;
-        move = new ChessMove(this, origin, destination);
-        move.setPromotion(QUEEN + turn*BLACK);
-        addMove(move);
-        move = new ChessMove(this, origin, destination);
-        move.setPromotion(ROOK + turn*BLACK);
-        addMove(move);
-        move = new ChessMove(this, origin, destination);
-        move.setPromotion(BISHOP + turn*BLACK);
-        addMove(move);
-        move = new ChessMove(this, origin, destination);
-        move.setPromotion(KNIGHT + turn*BLACK);
-        addMove(move);
-    }
-
     private void addMove(ChessMove move) {
         int destination = move.getDestination();
         if(destination < 0
@@ -866,11 +765,82 @@ public class ChessBoard implements Board {
            && pieces[destination] != UNDEFINED)) {
             return;
         }
-        move(move);
+        move(move, false);
         if(!isCheck(1 - turn)) {
             legalMoves.add(move);
         }
         undo();
+    }
+
+    /* -----  Updating controls  ----- */
+    private void updateControl() {
+        if(computedControl) { return; }
+        whiteControls = new int[nbSquares];
+        blackControls = new int[nbSquares];
+        int piece;
+        for(int i=0; i<nbSquares; i++) {
+            piece = pieces[i];
+            if(piece != UNDEFINED) {
+                updateControlUnique(piece/BLACK, i);
+            }
+        }
+        computedControl = true;
+    }
+
+    private void updateControlUnique(int player, int index) {
+        int piece = pieces[index];
+        int rank = getRank(index);
+        int file = getFile(index);
+        switch(piece%BLACK) {
+            case KING :
+                // normal move
+                for(int i=-1; i<=1; i++) {
+                    for(int j=-1; j<=1; j++) {
+                        if(j == 0 && i == 0) { continue; }
+                        addControl(player, square(file+i, rank+j));
+                    }
+                }
+                break;
+            case QUEEN :
+                // diagonal slide
+                slideControl(player, index, 1, 1);
+                slideControl(player, index, 1, -1);
+                slideControl(player, index, -1, 1);
+                slideControl(player, index, -1, -1);
+                // no break on purpose
+            case ROOK :
+                // horizontal slide
+                slideControl(player, index, 0, 1);
+                slideControl(player, index, 0, -1);
+                // vertical slide
+                slideControl(player, index, 1, 0);
+                slideControl(player, index, -1, 0);
+                break;
+            case BISHOP :
+                // diagonal slide
+                slideControl(player, index, 1, 1);
+                slideControl(player, index, 1, -1);
+                slideControl(player, index, -1, 1);
+                slideControl(player, index, -1, -1);
+                break;
+            case KNIGHT :
+                addControl(player, square(file + 2, rank + 1));
+                addControl(player, square(file + 2, rank - 1));
+                addControl(player, square(file - 2, rank + 1));
+                addControl(player, square(file - 2, rank - 1));
+                addControl(player, square(file + 1, rank + 2));
+                addControl(player, square(file + 1, rank - 2));
+                addControl(player, square(file - 1, rank + 2));
+                addControl(player, square(file - 1, rank - 2));
+                break;
+            case PAWN :
+                int direction = player==0 ? 1 : -1;
+                addControl(player, square(file+1, rank+direction));
+                addControl(player, square(file-1, rank+direction));
+                break;
+            default:
+                System.out.println("Waring (updateControl) : unrecognized piece (" + (piece%BLACK) + ")");
+        }
     }
 
     private void slideControl(int player, int index, int fileInc, int rankInc) {
@@ -904,113 +874,137 @@ public class ChessBoard implements Board {
         for(int i=0; i<nbSquares; i++) { pieces[i] = UNDEFINED; }
     }
 
-    private void resetControl() {
-        for(int i=0; i<nbSquares; i++) {
-            whiteControls[i] = 0;
-            blackControls[i] = 0;
-        }
-    }
-
     private void boardInit(String boardID) {
         reset();
         int nbBlank = 0;;
         char currChar;
         int charIndex = 0;
-        for(byte i=0; i<nbSquares; i++) {
-            currChar = boardID.charAt(charIndex++);
-            if(currChar == '/') {
-                i--;
-                continue;
-            }
-            // white pieces are uppercase letters
-            if (currChar < 'Z' && currChar > 'A') {
-                pieces[i] = pieceValue(currChar);
-                if(pieces[i]%BLACK == KING) {
-                    kingIndex[0] = i;
+        for(int i=size-1; i>=0; i--) {
+            for(int j=0; j<size; j++) {
+                int index = square(j,i);
+                currChar = boardID.charAt(charIndex++);
+                if(currChar == '/') { currChar = boardID.charAt(charIndex++); }
+                // white pieces are uppercase letters
+                if (currChar < 'Z' && currChar > 'A') {
+                    pieces[index] = pieceValue(currChar);
+                    if(pieces[index]%BLACK == KING) {
+                        kingIndex[0] = index;
+                    }
                 }
-            }
-            // black pieces are lowercase letters
-            if (currChar < 'z' && currChar > 'a') {
-                pieces[i] = BLACK;
-                currChar += 'A' - 'a';
-                pieces[i] += pieceValue(currChar);
-                if(pieces[i]%BLACK == KING) {
-                    kingIndex[1] = i;
+                // black pieces are lowercase letters
+                else if (currChar < 'z' && currChar > 'a') {
+                    pieces[index] = BLACK;
+                    currChar += 'A' - 'a';
+                    pieces[index] += pieceValue(currChar);
+                    if(pieces[index]%BLACK == KING) {
+                        kingIndex[1] = index;
+                    }
                 }
-            }
-            // not a letter -> must be a  number
-            else if (currChar > 'Z' || currChar < 'A'){
-                try {
-                    // a number means the number of blank squares on a rank
-                    nbBlank = Byte.parseByte(Character.toString(currChar++));
-                    i += (nbBlank-1);
-                    continue;
+                // not a letter -> must be a  number
+                else if (currChar > 'Z' || currChar < 'A'){
+                    try {
+                        // a number means the number of blank squares on a rank
+                        nbBlank = Byte.parseByte(Character.toString(currChar));
+                        j += (nbBlank-1);
+                        continue;
+                    }
+                    catch(Exception e) {
+                        System.out.println("Warning (boardInit) : invalid character : '" + currChar + "'");
+                    }
                 }
-                catch(Exception e) {
-                    System.out.println("Warning (boardInit) : invalid caracter : '" + currChar + "'");
-                }
+
             }
         }
-        setCastlingRights(boardID.substring(charIndex+1));
+
+        turn = boardID.charAt(++charIndex) == 'w' ? 0 : 1;
+        charIndex++;
+
+        // castling rights
+        setCastlingRights(boardID.substring(++charIndex));
+
+        // check for en passant
+        while(boardID.charAt(charIndex) != ' ') { charIndex++; }
+        charIndex++;
+        currChar = boardID.charAt(charIndex);
+        if(currChar == '-') { enPassantIndex = -1; }
+        else {
+            enPassantIndex = stringToSquare(boardID.substring(charIndex));
+            charIndex += 2;
+        }
+        charIndex += 2;
+
+        if(boardID.length() - charIndex < 2) {
+            return;
+        }
+        // number of moves without take
+        try {
+            nbMovesNoTake = 0;
+            while(boardID.charAt(charIndex) != ' ') {
+                nbMovesNoTake *= 10;
+                nbMovesNoTake += Character.getNumericValue(boardID.charAt(charIndex++));
+            }
+        } catch(Exception e) { e.printStackTrace(); }
+
+        if(boardID.length() - charIndex < 2) {
+            return;
+        }
+        charIndex++;
+        // number of moves
+        try {
+            nbMoves = Integer.parseInt(boardID.substring(charIndex));
+            nbMoves = nbMoves-1*2 + turn;
+        } catch(Exception e) { e.printStackTrace(); }
     }
 
+    /* -----  Updating castling rights  ----- */
     private void setCastlingRights(String s) {
-        if(s.equals(" ")) {
-            castlingRights = new boolean[4];
-            castlingRights[0] = true;
-            castlingRights[1] = true;
-            castlingRights[2] = true;
-            castlingRights[3] = true;
-            turn = 0;
-            return;
+        castlingRights = new boolean[4];
+        for(int i=0; i<4; i++) {
+            castlingRights[i] = false;
         }
         int charIndex = 0;
-
         castlingRights = new boolean[4];
-        castlingRights[0] = s.charAt(charIndex++) == '1';
-        castlingRights[1] = s.charAt(charIndex++) == '1';
-        castlingRights[2] = s.charAt(charIndex++) == '1';
-        castlingRights[3] = s.charAt(charIndex++) == '1';
-
-
-        turn = (int) (s.charAt(charIndex++) - '0');
-        charIndex++;
-        String substring = s.substring(charIndex);
-        if(substring.equals("null")) {
-            return;
+        if(s.charAt(charIndex) == '-') { return; }
+        if(s.charAt(charIndex) == 'K') {
+            castlingRights[0] = true;
+            charIndex++;
         }
-        moves.push(new ChessMove(this, substring));
+        if(s.charAt(charIndex) == 'Q') {
+            castlingRights[1] = true;
+            charIndex++;
+        }
+        if(s.charAt(charIndex) == 'k') {
+            castlingRights[2] = true;
+            charIndex++;
+        }
+        if(s.charAt(charIndex) == 'q') {
+            castlingRights[3] = true;
+            charIndex++;
+        }
     }
 
     private void updateCastlingRights() {
-        // white castlingRights
-        if(pieces[e] != KING) {
-            castlingRights[0] = false;
-            castlingRights[1] = false;
-        }
-        else {
-            if(pieces[h] != ROOK) {
-                castlingRights[0] = false;
-            }
-            if(pieces[a] != ROOK) {
-                castlingRights[1] = false;
-            }
-        }
-        // black castling rights
-        if(pieces[e+56] != KING + BLACK) {
-            castlingRights[2] = false;
-            castlingRights[3] = false;
-        }
-        else {
-            if(pieces[h+56] != ROOK + BLACK) {
-                castlingRights[2] = false;
-            }
-            if(pieces[a+56] != ROOK + BLACK) {
-                castlingRights[3] = false;
-            }
-        }
+        boolean[] oldCastlingRight = castlingRights;
+        castlingRights = new boolean[4];
+        // white short castle
+        castlingRights[0] = oldCastlingRight[0]
+                            && pieces[e] == KING
+                            && pieces[h] == ROOK;
+        // white long castle
+        castlingRights[1] = oldCastlingRight[1]
+                            && pieces[e] == KING
+                            && pieces[a] == ROOK;
+        // black short castle
+        castlingRights[2] = oldCastlingRight[2]
+                            && pieces[e+56] == KING + BLACK
+                            && pieces[h+56] == ROOK + BLACK;
+        // black long castle
+        castlingRights[3] = oldCastlingRight[3]
+                            && pieces[e+56] == KING + BLACK
+                            && pieces[a+56] == ROOK + BLACK;
     }
 
+    /* -----  Looking for checks  ----- */
     private boolean isCheck(int player) {
         int[] control = player==0? blackControls : whiteControls;
         if(control[kingIndex[player]] > 0) {
@@ -1019,6 +1013,7 @@ public class ChessBoard implements Board {
         return false;
     }
 
+    /* -----  Updating the Hashmap  ----- */
     private void incrementInHashMap() {
         Long id = toHash();
         Integer value = playedPositions.get(id);
@@ -1031,21 +1026,6 @@ public class ChessBoard implements Board {
             isDraw = true;
         }
         playedPositions.replace(id, Integer.valueOf(nbOccurences+1));
-    }
-
-    private void decrementInHashMap() {
-        Long id = toHash();
-        Integer value = playedPositions.get(id);
-        if(value == null) { return; }
-        int nbOccurences = (int) value;
-        if(nbOccurences == 1) {
-            playedPositions.remove(id);
-            return;
-        }
-        if(nbOccurences == 3) {
-            isDraw = false;
-        }
-        playedPositions.replace(id, Integer.valueOf(nbOccurences-1));
     }
 
 /*------------------------------------------------------------------------------
@@ -1067,35 +1047,29 @@ public class ChessBoard implements Board {
     }
 
     public int[] getSquares() { return pieces; }
-
-    public Vector<Move> getLegalMoves() { return new Vector<Move>(legalMoves); }
-
     public int getTurn() { return turn; }
-
-    public Move getLastMove() { return moves.top(); }
+    public int getnbMoves(){ return nbMoves; }
+    public int getKingPosition(int player) { return kingIndex[player]; }
 
     public int[] getControl(int player) {
-        if(player > 1) {
+        if(player > 1 || player < 0) {
             return null;
         }
         return player==0? whiteControls : blackControls;
     }
 
-    public int getKingPosition(int player) { return kingIndex[player]; }
-
 /*------------------------------------------------------------------------------
                                 FORMAT
 ------------------------------------------------------------------------------*/
-    public int square(int file, int rank) {
+    public static int square(int file, int rank) {
         if (file >= size || file < 0 || rank >= size || rank < 0) {
             return -1;
         }
         return rank*size + file;
     }
 
-    public int getRank(int index) { return index/size; }
-
-    public int getFile(int index) { return index%size; }
+    public static int getRank(int index) { return index/size; }
+    public static int getFile(int index) { return index%size; }
 
     private Long toHash() {
         long toReturn = 0;
@@ -1178,54 +1152,58 @@ public class ChessBoard implements Board {
 
     public String positionID() {
         String s = "";
-        int nbBlank = 0;
-        for(int i=0; i<nbSquares; i++) {
-            if(i != 0 && i%size == 0) {
+        for(int i=size-1; i>=0; i--) {
+            int nbBlank = 0;
+            for(int j=0; j<size; j++) {
+                int index = square(j, i);
+                int piece = pieces[index];
+                if(piece == UNDEFINED) {
+                    nbBlank++;
+                    continue;
+                }
                 if(nbBlank != 0) {
                     s += Integer.toString(nbBlank);
                     nbBlank = 0;
                 }
-                s += "/";
-            }
-            int piece = pieces[i];
-            if(piece == UNDEFINED) {
-                nbBlank++;
-                if(nbBlank == 8) {
-                    s += "8";
-                    nbBlank = 0;
-                }
-                continue;
+                char pieceName = (char) (pieceName(piece));
+                pieceName -= piece/BLACK == 1 ? ('A'-'a') : 0;
+                s += Character.toString(pieceName);
             }
             if(nbBlank != 0) {
                 s += Integer.toString(nbBlank);
                 nbBlank = 0;
             }
-            if(piece/BLACK == 0) {
-                s += pieceName(piece);
-                continue;
-            }
-            s += Character.toString((char)(pieceName(piece) - ('A'-'a')));
+            s += i!=0? "/" : "";
         }
-        if(nbBlank != 0) {
-            s += Integer.toString(nbBlank);
-            nbBlank = 0;
-        }
-        // castling rights
-        s += "/";
-        for(int i=0; i<4; i++) {
-            s += castlingRights[i]? "1" : "0";
-        }
-
         // Turn
-        s += (turn==0)? "0" : "1";
-        if(moves.isEmpty()) {
-            s += " null";
-            return s;
-        }
-        s += " " + moves.top();
+        s += (turn==0)? " w " : " b ";
+
+        // castling rights
+        s += castlingRights[0] ? "K" : "";
+        s += castlingRights[1] ? "Q" : "";
+        s += castlingRights[2] ? "k" : "";
+        s += castlingRights[3] ? "q" : "";
+
+        s += enPassantIndex != -1 ?
+             " " + squareToString(enPassantIndex) + " " :
+             " - ";
+        s += Integer.toString(nbMovesNoTake) + " ";
+        s += Integer.toString(nbMoves/2 + 1);
 
         return s;
 
+    }
+
+    public static String squareToString(int i) {
+        int file = getFile(i);
+        int rank = getRank(i);
+        return Character.toString((char)('a' + file)) + Integer.toString(rank+1);
+    }
+
+    public static int stringToSquare(String s) {
+        int file = s.charAt(0) - 'a';
+        int rank = Character.getNumericValue(s.charAt(1)) - 1;
+        return square(file, rank);
     }
 
     public String controlToString(int player, boolean flipped) {
@@ -1306,67 +1284,45 @@ public class ChessBoard implements Board {
 	}
 }
 
-class MoveStack {
-    private final int initSize = 10;
-    private ChessMove[] stack;
-    private int nbElements;
-    private int head = 0;
+/*******************************************************************************
+                                 BOARD STATE
+*******************************************************************************/
+class BoardState {
+    protected final int enPassantIndex;
+    protected final int[] pieces;
+    protected final int[] kingIndex;
+    protected final int[] whiteControls;
+    protected final int[] blackControls;
+    protected final Vector<Move> legalMoves;
+    protected final boolean[] castlingRights;
+    protected final int nbMovesNoTake;
+    private final HashMap<Long, Integer> playedPositions;
 
-    public MoveStack() {
-        stack = new ChessMove[initSize];
-        nbElements = 0;
+    BoardState(ChessBoard board) {
+        this.enPassantIndex = board.enPassantIndex;
+        this.pieces = new int[64];
+        for(int i=0; i<64; i++) this.pieces[i] = board.pieces[i];
+        this.kingIndex = new int[2];
+        this.kingIndex[0] = board.kingIndex[0];
+        this.kingIndex[1] = board.kingIndex[1];
+        this.whiteControls = board.whiteControls;
+        this.blackControls = board.blackControls;
+        this.legalMoves = board.legalMoves;
+        this.castlingRights = board.castlingRights;
+        this.nbMovesNoTake = board.nbMovesNoTake;
+        this.playedPositions = new HashMap<Long, Integer>(board.playedPositions);
     }
 
-    private void rescale() {
-        ChessMove[] newStack = new ChessMove[2*stack.length];
-        for(int i=0; i<nbElements; i++) {
-            newStack[i] = stack[i];
-        }
-        stack = newStack;
-    }
-
-    public void push(ChessMove move) {
-        if(nbElements >= stack.length) {
-            rescale();
-        }
-        stack[nbElements++] = move;
-    }
-
-    public ChessMove pop() {
-        if (nbElements == 0) {
-            return null;
-        }
-        return stack[--nbElements];
-    }
-
-    public ChessMove top() {
-        if (nbElements == 0) {
-            return null;
-        }
-        return stack[nbElements-1];
-    }
-
-    public boolean isEmpty() {
-        return (nbElements == 0);
-    }
-
-    public ChessMove head() {
-        if (head >= nbElements) {
-            return null;
-        }
-        return stack[head++];
-    }
-
-    public boolean reachedHead() {
-        //System.out.println("Head : " + head + ", nbElements : " + nbElements);
-        return head >= nbElements;
-    }
-
-    public void resetHead() {
-        head = 0;
-    }
-
-    public int getSize(){
-        return stack.length;
+    void recoverBoardState(ChessBoard board) {
+        board.enPassantIndex = this.enPassantIndex;
+        board.pieces = this.pieces;
+        board.kingIndex[0] = this.kingIndex[0];
+        board.kingIndex[1] = this.kingIndex[1];
+        board.whiteControls = this.whiteControls;
+        board.blackControls = this.blackControls;
+        board.legalMoves = this.legalMoves;
+        board.castlingRights = this.castlingRights;
+        board.nbMovesNoTake = this.nbMovesNoTake;
+        board.playedPositions = this.playedPositions;
     }
 }

@@ -17,7 +17,6 @@ public class Human implements Player {
         Vector<Move> vect = board.getLegalMoves();
         while(true) {
             String s = "";
-            System.out.println(name + " to move");
             System.out.println("Enter your move here : ");
             try {
                 BufferedReader bufferRead = new BufferedReader(new InputStreamReader(System.in));
@@ -26,7 +25,9 @@ public class Human implements Player {
             catch(IOException e) {
                 e.printStackTrace();
             }
-
+            if(s.equals("resign")) {
+                return null;
+            }
             for(byte i=0; i<vect.size(); i++) {
                 if(vect.get(i).toString().equals(s)) {
                     return vect.get(i);

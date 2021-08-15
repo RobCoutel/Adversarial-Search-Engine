@@ -8,4 +8,6 @@ public interface Move extends Comparable<Move> {
     public int compareTo(Move move);
 
     public String toString();
+
+    public boolean equals(Move move2);
 }

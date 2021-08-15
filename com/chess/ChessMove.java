@@ -7,8 +7,6 @@ public class ChessMove implements Move {
     private int moving, taken, promoted; // pieces
     private ChessBoard board;
     private int moveType = SIMPLE_MOVE;
-    private boolean[] previousCastlingRights;
-    private int previousNbMovesNoTake;
 
     private boolean resign = false;
 
@@ -31,7 +29,11 @@ public class ChessMove implements Move {
 
     public ChessMove(ChessBoard board, String moveName) {
         this.board = board;
-        if(moveName.equals("0-0")) {
+        if(moveName.equals("resign")) {
+            resign = true;
+            return;
+        }
+        else if(moveName.equals("0-0")) {
             moveType = SHORT_CASTLE;
             origin = 4 + board.getTurn()*56;
             destination = 6 + board.getTurn()*56;
@@ -54,23 +56,17 @@ public class ChessMove implements Move {
             moving = ChessBoard.PAWN;
         }
 
-        origin = parseCoordinate(moveName.substring(charIndex));
+        origin = ChessBoard.stringToSquare(moveName.substring(charIndex));
         charIndex += 2;
 
         if(moveName.charAt(charIndex) == 'x') {
             charIndex++;
         }
 
-        destination = parseCoordinate(moveName.substring(charIndex));
+        destination = ChessBoard.stringToSquare(moveName.substring(charIndex));
         charIndex += 2;
 
         construct();
-    }
-
-    private int parseCoordinate(String s) {
-        int file = s.charAt(0) - 'a';
-        int rank = Character.getNumericValue(s.charAt(1)) - 1;
-        return board.square(file, rank);
     }
 
     private void construct() {
@@ -121,18 +117,16 @@ public class ChessMove implements Move {
     public int getTaken() { return taken; }
     public int getPromoted() { return promoted; }
     public int moveType() { return moveType; }
-    public void setPreviousNbMovesNoTake(int nbMovesNoTake) { previousNbMovesNoTake = nbMovesNoTake; }
-    public int getPreviousNbMovesNoTake() { return previousNbMovesNoTake; }
-    public boolean[] getPreviousCastlingRights() { return previousCastlingRights; }
-
-    public void setPreviousCastlingRights(boolean[] castlingRights) {
-        previousCastlingRights = castlingRights;
-    }
 
     public void enPassant() {
         moveType = EN_PASSANT;
         int turn = board.getTurn();
         taken = board.getPiece(destination + (turn==0? -8:8));
+    }
+
+    public boolean isPawnPush2() {
+        return moving%ChessBoard.BLACK == ChessBoard.PAWN      // is a pawn
+               && abs(destination-origin) == 16;     // pushed 2 squares
     }
 
     public boolean isPawnPush2(int file) {
@@ -142,6 +136,9 @@ public class ChessMove implements Move {
     }
 
     public String toString() {
+        if(resign) {
+            return "resign";
+        }
         if(moveType == SHORT_CASTLE) {
             return "0-0";
         }
@@ -153,18 +150,11 @@ public class ChessMove implements Move {
         if(pieceName != 'P') {
             s += pieceName;
         }
-        int originFile = board.getFile(origin);
-        int originRank = board.getRank(origin);
-        s += Character.toString((char)('a' + originFile)) + Integer.toString(originRank+1);
+        s += ChessBoard.squareToString(origin);
         if (taken != ChessBoard.UNDEFINED) {
             s += "x";
         }
-        int destFile = board.getFile(destination);
-        int destRank = board.getRank(destination);
-        /*if(taken != ChessBoard.UNDEFINED) {
-            s += ChessBoard.pieceName(taken);
-        }*/
-        s += Character.toString((char)('a' + destFile)) + Integer.toString(destRank+1);
+        s += ChessBoard.squareToString(destination);
         if(promoted != ChessBoard.UNDEFINED) {
             s += "=" + ChessBoard.pieceName(promoted);
         }
@@ -180,12 +170,14 @@ public class ChessMove implements Move {
 
     public ChessMove clone(ChessBoard extBoard) {
         ChessMove clone = new ChessMove(extBoard, this.origin, this.destination);
+        clone.resign = this.resign;
+        if(resign) {
+            return clone;
+        }
         clone.moving = this.moving;
         clone.taken = this.taken;
         clone.promoted = this.promoted;
         clone.moveType = this.moveType;
-        clone.previousCastlingRights = (boolean[]) this.previousCastlingRights.clone();
-        clone.previousNbMovesNoTake = this.previousNbMovesNoTake;
 
         return clone;
     }
@@ -202,9 +194,13 @@ public class ChessMove implements Move {
 
     private int abs(int a) { return a<0? -a : a; }
 
-
     public int compareTo(Move move2) {
         ChessMove move = (ChessMove) move2;
+        if(resign || move.resign) {
+            if(resign && move.resign) { return 0; }
+            if(resign) { return -1; }
+            return 1;
+        }
         int moveImbalance1 = this.moveImbalance();
         int moveImbalance2 = move.moveImbalance();
         if (moveImbalance1 == moveImbalance2) {

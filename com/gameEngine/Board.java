@@ -19,12 +19,13 @@ public interface Board {
     public void play();
 
     /*
-    This function will play the move provided as input
+    This function will play the move provided as input. If the move provided is
+    null, then it is considered a resignation
     */
     public void move(Move move);
 
     /*
-    This function comes back one move back
+    This function comes back one move
     */
     public void undo();
 
@@ -51,6 +52,7 @@ public interface Board {
 
     /*
     This function returns whose turn it is to play
+    0 or 1
     */
     public int getTurn();
 

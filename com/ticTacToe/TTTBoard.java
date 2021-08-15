@@ -16,7 +16,7 @@ public class TTTBoard implements Board {
     private int nbMoves;
     private Player oplayer, xplayer;
     private int turn;
-    private int winner;
+    private int winner = 0;
 
     public TTTBoard(Player xplayer, Player oplayer) {
         board = new int[9];
@@ -53,7 +53,8 @@ public class TTTBoard implements Board {
             Move move = turn==0? xplayer.play(this.clone()):
                                  oplayer.play(this.clone());
             if(move == null) {
-                continue;
+                System.out.println("Warning in TTTBoard.play() : Invalid null move");
+                move = new TTTMove("resign");
             }
             move(move);
         }
@@ -73,6 +74,12 @@ public class TTTBoard implements Board {
     }
 
     public void move(Move move) {
+        if(move.isResignation()) {
+            moveStack[nbMoves++] = -1;
+            winner = turn==0? O : X;
+            turn = 1 - turn;
+            return;
+        }
         TTTMove tttMove = (TTTMove) move;
         int i = move.getDestination();
         if(board[i] != EMPTY) {
@@ -85,11 +92,19 @@ public class TTTBoard implements Board {
 
     public void undo() {
         int lastMove = moveStack[--nbMoves];
-        board[lastMove] = EMPTY;
+        if(lastMove > 0) {
+            board[lastMove] = EMPTY;
+        }
+        else {
+            winner = 0;
+        }
         turn = 1 - turn;
     }
 
     public int gameOver() {
+        if(winner != 0) {
+            return winner;
+        }
         // check rows
         for(int i=0; i<3; i++) {
             int symbolRow = board[i*3];

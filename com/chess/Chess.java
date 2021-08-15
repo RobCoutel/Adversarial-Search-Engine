@@ -49,8 +49,8 @@ public class Chess {
     public static void main(String[] args) {
         Player white, black;
         if(args.length == 0) {
-            white = new AgentMinimax("White", 3, new ChessEvaluation());
-            black = new AgentMinimax("Black", 3, new ChessEvaluation());
+            white = new AgentMinimaxSorted("White", 3, new ChessEvaluation());
+            black = new AgentMinimaxSorted("Black", 3, new ChessEvaluation());
         }
         else {
             white = getAgent(args[0], "White");
