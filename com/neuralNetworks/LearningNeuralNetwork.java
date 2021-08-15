@@ -11,14 +11,6 @@ public class LearningNeuralNetwork extends NeuralNetwork {
 /*******************************************************************************
                                  LAMBDA FUNCTIONS
 *******************************************************************************/
-
-    // Activation function
-    private static transient MapFunction sigmoid = new MapFunction() {
-        public double mapFunc(double x) {
-            return 1 / (1 + Math.exp(-x));
-        }
-    };
-
     // derivative of the cost function :
     // dC / da_i_L = (a_i_L - label_i)
     private static transient ApplicationFunction costDerivative = new ApplicationFunction() {
@@ -37,7 +29,7 @@ public class LearningNeuralNetwork extends NeuralNetwork {
     };
 
     // make a step in the gradient direction
-    private double step = 0.1;
+    private double step = 0.15;
     private transient ApplicationFunction makeStep = new ApplicationFunction() {
         public double applyFunc(double x, double y) {
             return x - step * y;
@@ -45,7 +37,14 @@ public class LearningNeuralNetwork extends NeuralNetwork {
     };
 
     private void updateStep() {
-        step = 0.1 * (1 - accuracy);
+        step = 0.1;
+        /*if(lastAccuracy > accuracy) {
+            step *= decay;
+        }
+        else if (step < 0.15) {
+            step *= gain;
+        }*/
+        //step = 0.15 * (1 - accuracy);
     }
 
 /*******************************************************************************
@@ -54,12 +53,17 @@ public class LearningNeuralNetwork extends NeuralNetwork {
     protected Matrix[] nActivity;
     protected Matrix[] nLinComb;
     private double accuracy;
+    private double lastAccuracy;
+    private final double decay = 0.75;
+    private final double gain = 1.1;
+
 
     public LearningNeuralNetwork(int[] dimensions) {
         super(dimensions);
         nActivity = new Matrix[nbLayers + 1];
         nLinComb = new Matrix[nbLayers + 1];
         accuracy = 0;
+        lastAccuracy = 0;
     }
 
 /*******************************************************************************
@@ -121,6 +125,7 @@ public class LearningNeuralNetwork extends NeuralNetwork {
         }
         accuracy /= batchSize;
         updateStep();
+        lastAccuracy = accuracy;
 
         // compute the averageGradient on the batch
         Matrix[] averageGradWeights = new Matrix[nbLayers];
@@ -145,7 +150,7 @@ public class LearningNeuralNetwork extends NeuralNetwork {
         Matrix[] wGrad = new Matrix[nbLayers];
         Matrix[] bGrad = new Matrix[nbLayers];
         Matrix output = propagate(inputs);
-        if(output.maxIndex() == label.maxIndex()) {
+        if(output.maxIndex()[0] == label.maxIndex()[0]) {
             accuracy += 1;
         }
 
@@ -191,7 +196,7 @@ public class LearningNeuralNetwork extends NeuralNetwork {
     }
 
     public double testAccuracy(LearningData batch) {
-        double accuracy = 0;
+        double acc = 0;
         double averageCost = 0;
         Matrix[] data = batch.getData();
         Matrix[] labels = batch.getLabels();
@@ -199,15 +204,13 @@ public class LearningNeuralNetwork extends NeuralNetwork {
             Matrix output = propagate(data[i]);
             int answer = output.maxIndex()[0];
             int expected = labels[i].maxIndex()[0];
-            averageCost += cost(output.transpose().getContent()[0], labels[i].transpose().getContent()[0]);
+            //averageCost += cost(output.transpose().getContent()[0], labels[i].transpose().getContent()[0]);
             if(answer == expected) {
-                accuracy++;
+                acc++;
             }
         }
-        averageCost /= data.length;
-        System.out.println("Average cost : " + averageCost + "\n");
-        accuracy /= data.length;
-        return accuracy;
+        acc /= data.length;
+        return acc;
     }
 
     private double cost(double[] results, double[] labels) {

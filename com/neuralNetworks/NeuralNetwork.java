@@ -12,7 +12,7 @@ public class NeuralNetwork implements Serializable {
                                  LAMBDA FUNCTIONS
 *******************************************************************************/
     // Activation function
-    private static transient MapFunction sigmoid = new MapFunction() {
+    protected static transient MapFunction sigmoid = new MapFunction() {
         public double mapFunc(double x) {
             return 1 / (1 + Math.exp(-x));
         }
