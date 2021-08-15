@@ -27,4 +27,6 @@ public class Agent implements Player {
 
     public Evaluation getEvaluation() { return evaluation; }
 
+    public int getNbNodesExplored() { return nbNodesExplored; }
+
 }
