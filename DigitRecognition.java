@@ -1,4 +1,3 @@
-//javac -d bin DigitRecognition.java
 //java --class-path bin DigitRecognition 1
 
 import java.lang.Math;
