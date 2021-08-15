@@ -85,12 +85,13 @@ public class DigitRecognition {
             batchSize = 20;
         }
 
-        System.out.println("Accuracy before training : " + nn.testAccuracy(data.generateBatch(batchSize)));
+        System.out.println("Accuracy before training : "
+            + nn.testAccuracy(data.generateBatch(batchSize))*100 + "%");
 
         for(int i=0; i<nbIteration; i++) {
             nn.learnStocha(data, batchSize, nbBatches);
-            System.out.println("Accuracy after training  " + i*nbBatches + " : "
-             + nn.testAccuracy(data.generateBatch(batchSize)));
+            System.out.println("Accuracy after training  " + (i+1)*nbBatches + " : "
+             + nn.testAccuracy(data.generateBatch(batchSize))*100 + "%");
         }
 
         saveNN(nn, "");
