@@ -45,48 +45,50 @@ public class Match extends Thread {
     public double getTimeScore() { return endTime / 3600000.0; }
 
     public void run() {
-        long startTime = System.currentTimeMillis();
-        if(game.equals("Chess")) {
-            board = new ChessBoard(p1, p2);
-        }
-        if(game.equals("TicTacToe")) {
-            board = new TTTBoard(p1, p2);
-        }
-        board.play();
-        int matchRes = board.gameOver();
-        resultP1 += 1 + matchRes;
-        resultP2 += 1 - matchRes;
+        try{
+            long startTime = System.currentTimeMillis();
+            if(game.equals("Chess")) {
+                board = new ChessBoard(p1, p2);
+            }
+            if(game.equals("TicTacToe")) {
+                board = new TTTBoard(p1, p2);
+            }
+            board.play();
+            int matchRes = board.gameOver();
+            resultP1 += 1 + matchRes;
+            resultP2 += 1 - matchRes;
 
-        if(game.equals("Chess")) {
-            board = new ChessBoard(p2, p1);
-        }
-        if(game.equals("TicTacToe")) {
-            board = new TTTBoard(p2, p1);
-        }
-        board.play();
-        matchRes = board.gameOver();
-        resultP1 += 1 - matchRes;
-        resultP2 += 1 + matchRes;
+            if(game.equals("Chess")) {
+                board = new ChessBoard(p2, p1);
+            }
+            if(game.equals("TicTacToe")) {
+                board = new TTTBoard(p2, p1);
+            }
+            board.play();
+            matchRes = board.gameOver();
+            resultP1 += 1 - matchRes;
+            resultP2 += 1 + matchRes;
 
-        endTime = (System.currentTimeMillis() - startTime);
+            endTime = (System.currentTimeMillis() - startTime);
 
-        /*
-        long hours = endTime / 3600000;
-        long minutes = (endTime % 3600000) / 60000;
-        long seconds = (endTime % 60000) / 1000;
-        long miliSec = endTime % 1000;
+            /*
+            long hours = endTime / 3600000;
+            long minutes = (endTime % 3600000) / 60000;
+            long seconds = (endTime % 60000) / 1000;
+            long miliSec = endTime % 1000;
 
 
-        System.out.println("Time for the Match : "
-        + hours + "h " + minutes + "min " + seconds + "sec " + miliSec + "ms\n"
-        + p1.getName() + "    " + Integer.toString(resultP1) + " - "
-        + Integer.toString(resultP2) + "    " + p2.getName() + " \n");
-        */
+            System.out.println("Time for the Match : "
+            + hours + "h " + minutes + "min " + seconds + "sec " + miliSec + "ms\n"
+            + p1.getName() + "    " + Integer.toString(resultP1) + " - "
+            + Integer.toString(resultP2) + "    " + p2.getName() + " \n");
+            */
+        } finally {
+            lock.release();
 
-        lock.release();
-
-        if(externalLock != null){
-           externalLock.release();
+            if(externalLock != null){
+               externalLock.release();
+             }
         }
     }
 

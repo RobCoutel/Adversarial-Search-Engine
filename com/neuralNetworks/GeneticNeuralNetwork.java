@@ -14,7 +14,7 @@ public class GeneticNeuralNetwork extends NeuralNetwork {
     private static transient ApplicationFunction breedFunc = new ApplicationFunction() {
         private double crossOverRate = 0.05;
         private double mutationRate = 0.01;
-        private double mutationStdev = 0.5;
+        private double mutationStdev = 0.05;
         Random rand = new Random();
         boolean pickFirst = true;
         public double applyFunc(double x, double y) {
@@ -26,7 +26,48 @@ public class GeneticNeuralNetwork extends NeuralNetwork {
             z = pickFirst ? x : y;
             r = rand.nextDouble();
             if(r < mutationRate) {
-                z *= rand.nextGaussian() * mutationStdev;
+                z += rand.nextGaussian() * mutationStdev;
+            }
+            return z;
+        }
+    };
+
+  private static transient ApplicationFunction breedHardFunc = new ApplicationFunction() {
+        private double crossOverRate = 0.05;
+        private double mutationRate = 0.20;
+        private double mutationStdev = 0.1;
+        Random rand = new Random();
+        boolean pickFirst = true;
+        public double applyFunc(double x, double y) {
+            double r = rand.nextDouble();
+            if(r < crossOverRate) {
+                pickFirst = !pickFirst;
+            }
+            double z;
+            z = pickFirst ? x : y;
+            r = rand.nextDouble();
+            if(r < mutationRate) {
+                z += rand.nextGaussian() * mutationStdev;
+            }
+            return z;
+        }
+    };
+
+  private static transient ApplicationFunction breedExtFunc = new ApplicationFunction() {
+        private double crossOverRate = 0.05;
+        private double mutationRate = 0.05;
+        Random rand = new Random();
+        boolean pickFirst = true;
+        public double applyFunc(double x, double y) {
+            double r = rand.nextDouble();
+            if(r < crossOverRate) {
+                pickFirst = !pickFirst;
+            }
+            double z;
+            z = pickFirst ? x : y;
+            r = rand.nextDouble();
+            if(r < mutationRate) {
+                z = rand.nextGaussian();
             }
             return z;
         }
@@ -48,7 +89,8 @@ public class GeneticNeuralNetwork extends NeuralNetwork {
         }
         return clone;
     }
-    public GeneticNeuralNetwork breed(GeneticNeuralNetwork nn) {
+
+    public GeneticNeuralNetwork breed(GeneticNeuralNetwork nn, int mode) {
         if(nbLayers != nn.nbLayers) {
             throw new IllegalArgumentException
             ("Error in NeuralNetwork.breed"
@@ -64,8 +106,17 @@ public class GeneticNeuralNetwork extends NeuralNetwork {
 
         GeneticNeuralNetwork newNN = this.clone();
         for(int i=0; i<nn.nbLayers; i++) {
-            newNN.layerWeights[i].apply(nn.layerWeights[i], breedFunc);
-            newNN.layerBiases[i].apply(nn.layerBiases[i], breedFunc);
+            switch(mode){
+                case 2 :
+                    newNN.layerWeights[i].apply(nn.layerWeights[i], breedExtFunc);
+                    newNN.layerBiases[i].apply(nn.layerBiases[i], breedExtFunc);
+                case 1 :
+                    newNN.layerWeights[i].apply(nn.layerWeights[i], breedHardFunc);
+                    newNN.layerBiases[i].apply(nn.layerBiases[i], breedHardFunc);
+                default :
+                    newNN.layerWeights[i].apply(nn.layerWeights[i], breedFunc);
+                    newNN.layerBiases[i].apply(nn.layerBiases[i], breedFunc);
+            }
         }
 
         return newNN;

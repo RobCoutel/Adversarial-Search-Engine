@@ -198,7 +198,13 @@ public class Genetics {
         for(int i=0; i<nbSurvivors; i++) {
             newGen[i] = neuralNets[i];
         }
-        for(int i=nbSurvivors; i<generationSize; i++) {
+        for(int i=nbSurvivors; i<2*nbSurvivors; i++) {
+            newGen[i] = breedOneHard(results, resTot, rand);
+        }
+        for(int i=2*nbSurvivors; i<3*nbSurvivors; i++) {
+            newGen[i] = breedOneExt(results, resTot, rand);
+        }
+        for(int i=3*nbSurvivors; i<generationSize; i++) {
             newGen[i] = breedOne(results, resTot, rand);
         }
         neuralNets = newGen;
@@ -222,7 +228,49 @@ public class Genetics {
                 break;
             }
         }
-        return nn1.clone().breed(nn2);
+        return nn1.clone().breed(nn2, 0);
+    }
+
+  private GeneticNeuralNetwork breedOneHard(double[] results, double resTot, Random rand) {
+        double r1 = rand.nextDouble() * resTot;
+        double r2 = rand.nextDouble() * resTot;
+        GeneticNeuralNetwork nn1 = null;
+        GeneticNeuralNetwork nn2 = null;
+        double tmp = 0;
+        for(int i=0; i<neuralNets.length; i++) {
+            tmp += results[i];
+            if(nn1 == null && r1 < tmp) {
+                nn1 = neuralNets[i];
+            }
+            if(nn2 == null && r2 < tmp) {
+                nn2 = neuralNets[i];
+            }
+            if(nn1!= null && nn2 !=null) {
+                break;
+            }
+        }
+        return nn1.clone().breed(nn2, 1);
+    }
+
+  private GeneticNeuralNetwork breedOneExt(double[] results, double resTot, Random rand) {
+        double r1 = rand.nextDouble() * resTot;
+        double r2 = rand.nextDouble() * resTot;
+        GeneticNeuralNetwork nn1 = null;
+        GeneticNeuralNetwork nn2 = null;
+        double tmp = 0;
+        for(int i=0; i<neuralNets.length; i++) {
+            tmp += results[i];
+            if(nn1 == null && r1 < tmp) {
+                nn1 = neuralNets[i];
+            }
+            if(nn2 == null && r2 < tmp) {
+                nn2 = neuralNets[i];
+            }
+            if(nn1!= null && nn2 !=null) {
+                break;
+            }
+        }
+        return nn1.clone().breed(nn2, 2);
     }
 
     public static void main(String[] args){
@@ -291,7 +339,7 @@ public class Genetics {
         Genetics genetics = new Genetics(generationSize, dimensions, load==1?true:false, coreLimit, saveNb, game);
 
         for(int i = 1; i <= numberOfGens; i++){
-            System.out.println("--------------------------\n  GENERATION " + Integer.toString(i+1) +
+            System.out.println("--------------------------\n  GENERATION " + Integer.toString(i) +
                                " out of " + Integer.toString(numberOfGens) + "\n--------------------------");
             if(i%100 == 0 || i == numberOfGens) {
                 genetics.nextGen(depth, true);

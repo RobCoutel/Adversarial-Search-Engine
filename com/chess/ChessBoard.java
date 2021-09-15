@@ -4,7 +4,7 @@ Name of project : Chess Engine
 Class : Board.java
 Date : March - 2021
 Author : Robin Coutelier
-Co-author : Gilles Pirenne
+Co-author : Lize Pirenne
 ------------------------------------------------------------------------------*/
 
 //lichess.org/games/export/RobCoutel?since=1627304400000
@@ -211,8 +211,8 @@ public class ChessBoard implements Board {
     public static final int KNIGHT = 2;
     public static final int BISHOP = 3;
     public static final int ROOK = 4;
-    public static final int QUEEN = 6;
-    public static final int KING = 7;
+    public static final int QUEEN = 5;
+    public static final int KING = 6;
 
     public static final int ROOK_VALUE = 5;
     public static final int BISHOP_VALUE = 3;

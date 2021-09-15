@@ -1,5 +1,5 @@
 # Adversarial-Search-Engine
-@ authors : COUTELIER Robin and PIRENNE Gilles
+@ authors : COUTELIER Robin and PIRENNE Lize
 
 This is an unfinished project realized by 2 students of the University of Liège.
 
