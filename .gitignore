@@ -24,5 +24,6 @@ hs_err_pid*
 *.exe
 *.ser
 *.txt
-launchChessTraining.sh
-bin/com/agents/NeuralNetParam-Chess/lastGeneration.txt
+bin/com/agents/NeuralNetParam-TicTacToe/lastGeneration.txt
+bin/DigitNeuralNet/lastNeuralNet.txt
+bin/DigitNeuralNet/lastNeuralNet.txt

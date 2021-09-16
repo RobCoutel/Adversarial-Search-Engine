@@ -5,6 +5,13 @@ import com.matrix.*;
 import java.lang.Math;
 import java.lang.IllegalArgumentException;
 import java.io.Serializable;
+import java.io.IOException;
+import java.io.FileWriter;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileNotFoundException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 
 public class NeuralNetwork implements Serializable {
 
@@ -60,6 +67,37 @@ public class NeuralNetwork implements Serializable {
         dimensions[0] = weights[0].getHeight();
         for(int i=1; i<nbLayers; i++) {
             dimensions[i] = weights[i-1].getWidth();
+        }
+    }
+
+    public static NeuralNetwork loadNeuralNetwork(String path) {
+        try {
+            FileInputStream fileIn = new FileInputStream(path);
+            ObjectInputStream in = new ObjectInputStream(fileIn);
+            NeuralNetwork toReturn = (NeuralNetwork) in.readObject();
+            in.close();
+            fileIn.close();
+            return toReturn;
+
+        } catch (IOException i) {
+           i.printStackTrace();
+           return null;
+        } catch (ClassNotFoundException c) {
+           System.out.println("NeuralNetwork class not found");
+           c.printStackTrace();
+           return null;
+        }
+    }
+
+    public void saveNeuralNetwork(String path) {
+        try {
+            FileOutputStream fileOut = new FileOutputStream(path);
+            ObjectOutputStream out = new ObjectOutputStream(fileOut);
+            out.writeObject(this);
+            out.close();
+            fileOut.close();
+        } catch (IOException i) {
+            i.printStackTrace();
         }
     }
 
