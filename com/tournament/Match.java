@@ -59,6 +59,9 @@ public class Match extends Thread {
             resultP2 += 1 - matchRes;
 
             if(game.equals("Chess")) {
+                int gameLength = ((ChessBoard) board).gameToPGN().length();
+                resultP1 -= gameLength/10000.0;
+                resultP2 -= gameLength/10000.0;
                 board = new ChessBoard(p2, p1);
             }
             if(game.equals("TicTacToe")) {
@@ -68,6 +71,12 @@ public class Match extends Thread {
             matchRes = board.gameOver();
             resultP1 += 1 - matchRes;
             resultP2 += 1 + matchRes;
+
+            if(game.equals("Chess")) {
+                int gameLength = ((ChessBoard) board).gameToPGN().length();
+                resultP1 -= gameLength/10000.0;
+                resultP2 -= gameLength/10000.0;
+            }
 
             endTime = (System.currentTimeMillis() - startTime);
 

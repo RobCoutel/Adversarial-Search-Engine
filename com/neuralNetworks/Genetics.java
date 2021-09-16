@@ -327,7 +327,7 @@ public class Genetics {
         else if(game.equals("Chess")) {
             dimensions = new int[4];
             dimensions[0] = ChessEvaluationNeural.getNbInputs();
-            dimensions[1] = 50;
+            dimensions[1] = 100;
             dimensions[2] = 50;
             dimensions[3] = 1;
         }
