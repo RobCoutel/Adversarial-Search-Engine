@@ -285,6 +285,7 @@ public class ChessBoard implements Board {
     protected int enPassantIndex = -1;
     protected HashMap<Long, Integer> playedPositions;
 
+    protected Move lastMove = null;
 
     private Stack<BoardState> stateStack;
 
@@ -383,7 +384,9 @@ public class ChessBoard implements Board {
                 + s);
             }
             if(toPlay == null) {
-                toPlay = new ChessMove(this, "resign");
+                result = 2*turn - 1;
+                computedResult = true;
+                return;
             }
             move(toPlay.clone(this));
         }
@@ -413,8 +416,8 @@ public class ChessBoard implements Board {
             + " The move provided was null");
         }
         // save the current state of the board before playing the move
+        lastMove = toPlay;
         stateStack.push(new BoardState(this));
-
         ChessMove move = (ChessMove) toPlay;
         makeMove(move);
         if(move.isPawnPush2()) {
@@ -1091,6 +1094,19 @@ public class ChessBoard implements Board {
         return Long.valueOf(toReturn);
     }
 
+    public String gameToPGN() {
+        String s = "";
+        int move = 0;
+        for(BoardState state : new Vector<BoardState>(stateStack)) {
+            if(move%2 == 0) {
+                s += Integer.toString(move/2 + 1) + ". ";
+            }
+            move++;
+            s += state.lastMove + " ";
+        }
+        return s;
+    }
+
     public String toString(boolean flipped) {
         final String ANSI_RESET = "\u001B[0m";
         final String ANSI_RED = "\u001B[31m";
@@ -1296,6 +1312,7 @@ class BoardState {
     protected final Vector<Move> legalMoves;
     protected final boolean[] castlingRights;
     protected final int nbMovesNoTake;
+    protected final Move lastMove;
     private final HashMap<Long, Integer> playedPositions;
 
     BoardState(ChessBoard board) {
@@ -1310,6 +1327,7 @@ class BoardState {
         this.legalMoves = board.legalMoves;
         this.castlingRights = board.castlingRights;
         this.nbMovesNoTake = board.nbMovesNoTake;
+        this.lastMove = board.lastMove;
         this.playedPositions = new HashMap<Long, Integer>(board.playedPositions);
     }
 
@@ -1323,6 +1341,7 @@ class BoardState {
         board.legalMoves = this.legalMoves;
         board.castlingRights = this.castlingRights;
         board.nbMovesNoTake = this.nbMovesNoTake;
+        board.lastMove = lastMove;
         board.playedPositions = this.playedPositions;
     }
 }

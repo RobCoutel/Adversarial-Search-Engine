@@ -49,8 +49,8 @@ public class Chess {
     public static void main(String[] args) {
         Player white, black;
         if(args.length == 0) {
-            white = new AgentMinimaxSorted("White", 3, new ChessEvaluation());
-            black = new AgentMinimaxSorted("Black", 3, new ChessEvaluation());
+            white = new AgentMinimaxSorted("White", 1, new ChessEvaluation());
+            black = new AgentMinimaxSorted("Black", 1, new ChessEvaluation());
         }
         else {
             white = getAgent(args[0], "White");
@@ -66,5 +66,6 @@ public class Chess {
         if(board.gameOver() != 2) {
             System.out.println("GAME OVER");
         }
+        System.out.println(board.gameToPGN());
     }
 }

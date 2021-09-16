@@ -158,9 +158,6 @@ public class ChessMove implements Move {
         if(promoted != ChessBoard.UNDEFINED) {
             s += "=" + ChessBoard.pieceName(promoted);
         }
-        if(moveType == EN_PASSANT) {
-            s += "enPass";
-        }
         return s;
     }
 
