@@ -30,3 +30,5 @@ bin/DigitNeuralNet/lastNeuralNet.txt
 launchChessTraining.sh
 bin/com/agents/NeuralNetParam-Chess/lastGeneration.txt
 launchChessTraining.sh
+*.txt
+*.sh
