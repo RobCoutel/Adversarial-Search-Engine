@@ -295,7 +295,7 @@ public class Genetics {
             coreLimit = coreLimit > 0 ? coreLimit : 1;
             case 3 :
             depth = Integer.parseInt(args[2]);
-            depth = depth > 0 ? depth : 1;
+            depth = depth >= 0 ? depth : 1;
             case 2 :
             numberOfGens = Integer.parseInt(args[1]);
             numberOfGens = numberOfGens >= 0 ? numberOfGens : 1;
