@@ -1,4 +1,5 @@
-//java --class-path bin DigitRecognition 1
+//java --class-path bin DigitRecognition load 200 50 200
+//java --class-path bin DigitRecognition <load> <nbBatches> <nbIteration> <batchSize>
 
 import java.lang.Math;
 import java.util.Date;
@@ -30,58 +31,57 @@ public class DigitRecognition {
             myWriter.write(fullPath);
             myWriter.close();
 
-            FileOutputStream fileOut = new FileOutputStream(fullPath);
-            ObjectOutputStream out = new ObjectOutputStream(fileOut);
-            out.writeObject(nn);
-            out.close();
-            fileOut.close();
+            nn.saveNeuralNetwork(fullPath);
         } catch (IOException i) {
             i.printStackTrace();
         }
     }
 
-    public static NeuralNetwork loadNN() {
-        return null;
+    public static LearningNeuralNetwork loadNN() {
+        try {
+            File myObj = new File("bin/DigitNeuralNet/" + "lastNeuralNet.txt");
+            Scanner myReader = new Scanner(myObj);
+            String lastNNpath = "";
+            while (myReader.hasNextLine()) {
+                 lastNNpath += myReader.nextLine();
+            }
+            myReader.close();
+
+            return LearningNeuralNetwork.loadNeuralNetwork(lastNNpath);
+
+        } catch (FileNotFoundException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
+            return null;
+        }
     }
 
     public static void main(String[] args) {
         LearningNeuralNetwork nn;
         LearningData data;
         int nbBatches, nbIteration, batchSize;
-        if(args.length == 0 || Integer.parseInt(args[0]) == 0) {
-            int[] dimensions = {784, 10, 10, 10};
 
-            String path = "mnist_train_small.csv";
-            nn = new LearningNeuralNetwork(dimensions);
-            data = new LearningData(path);
+        int[] dimensions = {784, 10, 10, 10};
 
-            nbBatches = 2000;
-            nbIteration = 50;
-            batchSize = 200;
+        String path = "mnist_train_small.csv";
+        nn = new LearningNeuralNetwork(dimensions);
+        data = new LearningData(path);
+
+        if(args.length > 0 && args[0].equals("load")) {
+            System.out.println("Loading NeuralNetwork");
+            nn = loadNN();
         }
-        else {
-            int[] dimensions = {1, 4, 4};
-            String path = "test_data.csv";
-
-            /*double[][] weightsArray = {{-2}, {2}};
-            double[][] biasesArray = {{1}, {-1}};
-            Matrix[] weights = new Matrix[1];
-            Matrix[] biases = new Matrix[1];
-            weights[0] = new Matrix(weightsArray);
-            biases[0] = new Matrix(biasesArray);
-            nn = new NeuralNetwork(weights, biases);*/
-            nn = new LearningNeuralNetwork(dimensions);
-
-            /*double[] input0 = {0};
-            System.out.println("Output 0 : " + nn.propagate(new Matrix(input0)));
-            double[] input1 = {1};
-            System.out.println("Output 1 : " + nn.propagate(new Matrix(input1)));*/
-
-            data = new LearningData(path);
-
-            nbBatches = 1000;
-            nbIteration = 10;
-            batchSize = 20;
+        nbBatches = 200;
+        if(args.length > 1) {
+            nbBatches = Integer.parseInt(args[1]);
+        }
+        nbIteration = 50;
+        if(args.length > 2) {
+            nbIteration = Integer.parseInt(args[2]);
+        }
+        batchSize = 200;
+        if(args.length > 3) {
+            batchSize = Integer.parseInt(args[3]);
         }
 
         System.out.println("Accuracy before training : "

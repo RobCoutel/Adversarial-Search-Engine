@@ -24,3 +24,6 @@ hs_err_pid*
 *.exe
 *.ser
 *.txt
+bin/com/agents/NeuralNetParam-TicTacToe/lastGeneration.txt
+bin/DigitNeuralNet/lastNeuralNet.txt
+bin/DigitNeuralNet/lastNeuralNet.txt
