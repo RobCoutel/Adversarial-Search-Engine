@@ -38,7 +38,7 @@ public class ChessEvaluationNeural implements NeuralEvaluation {
             }
         }
 
-        input[64*12] = ((double) board.getTurn()) - 0.5;
+        input[64*12] = ((double) board.getTurn());
 
         double[] castlingRights = board.getCastlingRights();
         for(int i=0; i<4; i++) {

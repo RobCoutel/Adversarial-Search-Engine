@@ -5,7 +5,7 @@ import com.matrix.*;
 import com.neuralNetworks.NeuralNetwork;
 
 public class TTTEvaluationNeural implements NeuralEvaluation {
-    private static final int nbInputs = 10;
+    private static final int nbInputs = 28;
     private NeuralNetwork nn;
 
     public TTTEvaluationNeural(NeuralNetwork nn) {
@@ -23,7 +23,9 @@ public class TTTEvaluationNeural implements NeuralEvaluation {
         int[] squares = board.getSquares();
 
         for(int i=0; i<squares.length; i++) {
-            input[i] = squares[i];
+            if(squares[i] == 0) { input[3*i] = 1; }
+            else if(squares[i] == 1) { input[3*i+1] = 1; }
+            else { input[3*i+2] = 1; }
         }
         input[squares.length] = ((double) board.getTurn())*2 - 1;
         //System.out.println("Output : " + Double.toString(nn.propagate(input)[0]));
