@@ -19,6 +19,12 @@ public class ChessEvaluationNeural implements NeuralEvaluation {
 
     public double evaluate(Board board_) {
         ChessBoard board = (ChessBoard) board_;
+
+        if(board_.gameOver() != 2){
+            return board_.gameOver() * 100;
+        }
+
+
         double[] input = new double[nbInputs];
 
         int[] squares = board.getSquares();
