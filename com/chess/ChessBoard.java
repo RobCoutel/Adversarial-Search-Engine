@@ -181,6 +181,7 @@ import com.gameEngine.*;
 import java.util.Vector;
 import java.util.Stack;
 import java.util.HashMap;
+import java.util.Random;
 import java.lang.IllegalArgumentException;
 
 public class ChessBoard implements Board {
@@ -203,6 +204,8 @@ public class ChessBoard implements Board {
     private boolean printGame = false;
     public static boolean debug2 = false;
 
+    public static long[][] zobristTable = null;
+
 /*------------------------------------------------------------------------------
                                     PIECES
 ------------------------------------------------------------------------------*/
@@ -220,7 +223,11 @@ public class ChessBoard implements Board {
     public static final int QUEEN_VALUE = 9;
     public static final int PAWN_VALUE = 1;
 
-    public static final int BLACK = 8;
+    public static final int BLACK = 7;
+
+    private static final int[] kingMove = {-9, -1, 7, -8, 8, -7, 1, 9};
+    private static final int[] knightMove = {-10, 6, -17, 15, -15, 17, -6, 10};
+    private static final int[][] pawnMove = {{7, 8, 9}, {-9, -8, -7}};
 
     public static char pieceName(int piece) {
         switch(piece%BLACK) {
@@ -277,7 +284,7 @@ public class ChessBoard implements Board {
 
     protected int[] pieces;
     protected int[] kingIndex;
-    protected int[] whiteControls, blackControls;
+    protected int[][] control;
     protected boolean[] castlingRights;
     protected Vector<Move> legalMoves;
     protected int nbMovesNoTake = 0;
@@ -296,7 +303,8 @@ public class ChessBoard implements Board {
     private int result = 2;
     private boolean computedResult = false;
     private boolean computedLegalMoves = false;
-    private boolean computedControl = false;
+    protected boolean computedControlW = false;
+    protected boolean computedControlB = false;
 
 /*------------------------------------------------------------------------------
                                  CONSTRUCTORS
@@ -319,6 +327,10 @@ public class ChessBoard implements Board {
     }
 
     private void construct(String boardID, Player white, Player black) {
+        if (zobristTable == null) {
+            zobristInit();
+        }
+
         startingPosition = boardID;
 
         players = new Player[2];
@@ -330,17 +342,21 @@ public class ChessBoard implements Board {
         pieces = new int[nbSquares];
 
         kingIndex = new int[2];
+        kingIndex[0] = -1;
+        kingIndex[1] = -1;
         boardInit(boardID);
+        if(kingIndex[0] == -1 || kingIndex[1] == -1) {
+            String errMsg = "Error in ChessBoard.init : The provided FEN code is missing a king\n";
+            throw new IllegalArgumentException(errMsg);
+        }
 
-        whiteControls = new int[nbSquares];
-        blackControls = new int[nbSquares];
+        control = new int[2][nbSquares];
 
         legalMoves = new Vector<Move>();
 
         int initialCapacity = 200;
         playedPositions = new HashMap<Long, Integer>(initialCapacity);
         incrementInHashMap();
-
         updateLegalMoves();
     }
 
@@ -419,13 +435,17 @@ public class ChessBoard implements Board {
         lastMove = toPlay;
         stateStack.push(new BoardState(this));
         ChessMove move = (ChessMove) toPlay;
+
+        // play the move
         makeMove(move);
+        // save for en passant
         if(move.isPawnPush2()) {
             enPassantIndex = move.getDestination() + (turn==0? -8 : 8);
         }
         else { enPassantIndex = -1; }
         turn = 1 - turn;
 
+        // update the 50 move counter
         if(move.getTaken() == UNDEFINED
         && move.getMoving()%BLACK != PAWN) {
             nbMovesNoTake++;
@@ -435,8 +455,10 @@ public class ChessBoard implements Board {
             playedPositions.clear();
         }
 
+        // reset computed booleans
         computedResult = false;
-        computedControl = false;
+        computedControlW = false;
+        computedControlB = false;
         computedLegalMoves = false;
 
         // update HashMap
@@ -444,7 +466,6 @@ public class ChessBoard implements Board {
 
         // update the derived state of the board
         updateCastlingRights();
-        updateControl();
         // does not update while in recursive call (updateLegalMoves->addMove->move)
         // to prevent infinite recursion
         if(updateLegalMoves) {
@@ -460,7 +481,6 @@ public class ChessBoard implements Board {
 
         computedResult = false;
         computedLegalMoves = true;
-        computedControl = true;
         nbMoves--;
     }
 
@@ -532,7 +552,7 @@ public class ChessBoard implements Board {
         case ChessMove.EN_PASSANT :
             pieces[move.getDestination()] = move.getMoving();
             pieces[move.getOrigin()] = UNDEFINED;
-            int takenIndex = move.getDestination() + ((turn==0)?-8:+8);
+            int takenIndex = move.getDestination() + (-8 + 16*turn);
             pieces[takenIndex] = UNDEFINED;
             break;
         default :
@@ -547,7 +567,7 @@ public class ChessBoard implements Board {
     /* -----  Updating legal moves  ----- */
     private void updateLegalMoves() {
         if(computedLegalMoves) { return; }
-        if(!computedControl) { updateControl(); }
+        updateControl(1-turn);
         legalMoves = new Vector<Move>();
         int piece;
         for(int i=0; i<nbSquares; i++) {
@@ -588,37 +608,31 @@ public class ChessBoard implements Board {
     private void kingMove(int index) {
         int rank = getRank(index);
         int file = getFile(index);
-        int[] control = turn==0? blackControls : whiteControls;
         // normal move
-        for(int i=-1; i<=1; i++) {
-            for(int j=-1; j<=1; j++) {
-                int dest = square(file+i, rank+j);
-                if((j == 0 && i == 0)
-                || dest < 0 || dest > nbSquares
-                || control[dest] > 0) {
-                    continue;
-                }
-                addMove(new ChessMove(this, index, dest));
-            }
+        int i = file == a ? 3 : 0;
+        int end = file == h ? 5 : 8;
+        for(; i<end; i++) {
+            int dest = index + kingMove[i];
+            addMove(new ChessMove(this, index, dest), dest);
         }
         // short castle
         if(castlingRights[2*turn]
         && pieces[index+1] == UNDEFINED
         && pieces[index+2] == UNDEFINED
-        && control[index] == 0 // is check?
-        && control[index+1] == 0
-        && control[index+2] == 0) {
-            addMove(new ChessMove(this, "0-0"));
+        && control[1-turn][index] == 0 // is check?
+        && control[1-turn][index+1] == 0
+        && control[1-turn][index+2] == 0) {
+            addMove(new ChessMove(this, ChessMove.SHORT_CASTLE), index+2);
         }
         // long castle
         if(castlingRights[2*turn+1]
         && pieces[index-1] == UNDEFINED
         && pieces[index-2] == UNDEFINED
         && pieces[index-3] == UNDEFINED
-        && control[index] == 0 // is check?
-        && control[index-1] == 0
-        && control[index-2] == 0) {
-            addMove(new ChessMove(this, "0-0-0"));
+        && control[1-turn][index] == 0 // is check?
+        && control[1-turn][index-1] == 0
+        && control[1-turn][index-2] == 0) {
+            addMove(new ChessMove(this, ChessMove.LONG_CASTLE), index-2);
         }
     }
 
@@ -639,81 +653,58 @@ public class ChessBoard implements Board {
     private void knightMove(int index) {
         int rank = getRank(index);
         int file = getFile(index);
-        addMove(new ChessMove (this, index, square(file + 2, rank + 1)));
-        addMove(new ChessMove (this, index, square(file + 2, rank - 1)));
-        addMove(new ChessMove (this, index, square(file - 2, rank + 1)));
-        addMove(new ChessMove (this, index, square(file - 2, rank - 1)));
-        addMove(new ChessMove (this, index, square(file + 1, rank + 2)));
-        addMove(new ChessMove (this, index, square(file + 1, rank - 2)));
-        addMove(new ChessMove (this, index, square(file - 1, rank + 2)));
-        addMove(new ChessMove (this, index, square(file - 1, rank - 2)));
+        int i = file == a ? 4 : 0;
+        i = file == b ? 2 : i;
+        int end = file == h ? 4 : 8;
+        end = file == g ? 6 : end;
+        for(; i<end; i++) {
+            int dest = index + knightMove[i];
+            addMove(new ChessMove(this, index, dest), dest);
+        }
     }
 
     private void pawnMove(int index) {
         int rank = getRank(index);
         int file = getFile(index);
-        int direction     = turn==0 ? 1 : -1;
-        int startRank     = turn==0 ? 1 : 6;
-        int promotionRank = turn==0 ? 6 : 1 ;
+        int[] moves = pawnMove[turn];
+        int startRank     =  5*turn + 1;
+        int promotionRank = 6 - 5*turn;
         rank = getRank(index);
         file = getFile(index);
-        // promotions
-        if(rank == promotionRank) {
-            int dest = square(file, rank+direction);
-            if(dest >= 0 && pieces[dest] == UNDEFINED) {
-                promotion(index, dest);
-            }
-            dest = square(file-1, rank+direction);
-            // take left
-            if(dest >= 0
-            && pieces[dest] != UNDEFINED
-            && pieces[dest]/BLACK != turn) {
-                promotion(index, dest);
-            }
-            // take right
-            dest = square(file+1, rank+direction);
-            if(dest >= 0
-            && pieces[dest] != UNDEFINED
-            && pieces[dest]/BLACK != turn) {
-                promotion(index, dest);
-            }
-        }
-        else {
-            int dest = square(file, rank+direction);
-            // pushing
-            if(dest>= 0 && pieces[dest] == UNDEFINED) {
-                addMove(new ChessMove(this, index, square(file, rank + direction)));
-                if (rank == startRank
-                && pieces[square(file, rank+2*direction)] == UNDEFINED) {
-                    addMove(new ChessMove(this, index, square(file, rank + 2*direction)));
+
+        int i = file == a ? 1 : 0;
+        int end = file == h ? 2 : 3;
+        for(; i<end; i++) {
+            int dest = index + moves[i];
+            // simple push
+            if(i%2==1 && pieces[dest] == UNDEFINED) {
+                // promotion
+                if(rank == promotionRank) {
+                    promotion(index, dest);
+                    continue;
+                }
+                addMove(new ChessMove(this, index, dest), dest);
+                // double push
+                dest = dest + moves[i];
+                if(rank == startRank && pieces[dest] == UNDEFINED) {
+                    addMove(new ChessMove(this, index, dest), dest);
                 }
             }
-            // take left
-            pawnTake(index, square(file-1, rank+direction));
-            // take right
-            pawnTake(index, square(file+1, rank+direction));
-            if(rank == 4 - turn && enPassantIndex != -1) {
-                // en passant left
-                enPassant(index, square(file-1, rank+direction));
-                // en passant right
-                enPassant(index, square(file+1, rank+direction));
+            else if(i%2==0
+                && (pieces[dest] != UNDEFINED
+                  && pieces[dest]/BLACK != turn)
+                 || dest == enPassantIndex) {
+                // promotion
+                if(rank == promotionRank) {
+                    promotion(index, dest);
+                    continue;
+                }
+                ChessMove newMove = new ChessMove(this, index, dest);
+                if(dest == enPassantIndex) {
+                    newMove.enPassant();
+                }
+                addMove(newMove, dest);
             }
-        }
-    }
-
-    private void pawnTake(int index, int dest) {
-        if(dest >= 0
-           && pieces[dest] != UNDEFINED
-           && pieces[dest]/BLACK != turn) {
-            addMove(new ChessMove(this, index, dest));
-        }
-    }
-
-    private void enPassant(int index, int dest) {
-        if(dest >= 0 && dest<nbSquares && dest == enPassantIndex) {
-            ChessMove newMove = new ChessMove(this, index, dest);
-            newMove.enPassant();
-            addMove(newMove);
         }
     }
 
@@ -721,16 +712,16 @@ public class ChessBoard implements Board {
         ChessMove move;
         move = new ChessMove(this, origin, destination);
         move.setPromotion(QUEEN + turn*BLACK);
-        addMove(move);
+        addMove(move, destination);
         move = new ChessMove(this, origin, destination);
         move.setPromotion(ROOK + turn*BLACK);
-        addMove(move);
+        addMove(move, destination);
         move = new ChessMove(this, origin, destination);
         move.setPromotion(BISHOP + turn*BLACK);
-        addMove(move);
+        addMove(move, destination);
         move = new ChessMove(this, origin, destination);
         move.setPromotion(KNIGHT + turn*BLACK);
-        addMove(move);
+        addMove(move, destination);
     }
 
     private void slideMove(int currIndex, int fileInc, int rankInc) {
@@ -742,17 +733,18 @@ public class ChessBoard implements Board {
         while (file < size && file >= 0 && rank < size && rank >= 0) {
             int destination = square(file, rank);
             int pieceInDest = pieces[destination];
-            // empty square
-            if(pieceInDest == UNDEFINED) {
-                addMove(new ChessMove(this, currIndex, destination));
-            }
+
             // same color piece
-            else if(pieceInDest/BLACK == piece/BLACK) {
+            if(pieceInDest != UNDEFINED
+            && pieceInDest/BLACK == piece/BLACK) {
                 break;
             }
-            // different color piece
-            else if(pieceInDest/BLACK != piece/BLACK) {
-                addMove(new ChessMove(this, currIndex, destination));
+
+            addMove(new ChessMove(this, currIndex, destination), destination);
+
+            // capture a piece (the color check is inplicit since the program
+            // would have left the loop otherwise)
+            if(pieceInDest != UNDEFINED) {
                 break;
             }
             file = file + fileInc;
@@ -760,15 +752,15 @@ public class ChessBoard implements Board {
         }
     }
 
-    private void addMove(ChessMove move) {
-        int destination = move.getDestination();
+    private void addMove(ChessMove move, int destination) {
         if(destination < 0
-           || destination > nbSquares
+           || destination >= nbSquares
            || (pieces[destination]/BLACK == move.getMoving()/BLACK
            && pieces[destination] != UNDEFINED)) {
             return;
         }
         move(move, false);
+        updateControl(turn);
         if(!isCheck(1 - turn)) {
             legalMoves.add(move);
         }
@@ -776,32 +768,42 @@ public class ChessBoard implements Board {
     }
 
     /* -----  Updating controls  ----- */
-    private void updateControl() {
-        if(computedControl) { return; }
-        whiteControls = new int[nbSquares];
-        blackControls = new int[nbSquares];
+    private void updateControl(int player) {
+        if((player==0 && computedControlW)
+        || (player==1 && computedControlB)
+        || (player==2 && computedControlW && computedControlB)) {
+            return;
+        }
+        control = new int[2][nbSquares];
         int piece;
         for(int i=0; i<nbSquares; i++) {
             piece = pieces[i];
-            if(piece != UNDEFINED) {
+            if(piece != UNDEFINED
+            && (piece/BLACK == player
+            || player == 2)) {
                 updateControlUnique(piece/BLACK, i);
             }
         }
-        computedControl = true;
+        if(player == 0 || player == 2 ) {
+            computedControlW = true;
+        }
+        if(player == 0 || player == 2 ) {
+            computedControlB = true;
+        }
     }
 
     private void updateControlUnique(int player, int index) {
         int piece = pieces[index];
         int rank = getRank(index);
         int file = getFile(index);
+        int i, end;
         switch(piece%BLACK) {
             case KING :
                 // normal move
-                for(int i=-1; i<=1; i++) {
-                    for(int j=-1; j<=1; j++) {
-                        if(j == 0 && i == 0) { continue; }
-                        addControl(player, square(file+i, rank+j));
-                    }
+                i = file == a ? 3 : 0;
+                end = file == h ? 5 : 8;
+                for(; i<end; i++) {
+                    addControl(player, index + kingMove[i]);
                 }
                 break;
             case QUEEN :
@@ -827,19 +829,21 @@ public class ChessBoard implements Board {
                 slideControl(player, index, -1, -1);
                 break;
             case KNIGHT :
-                addControl(player, square(file + 2, rank + 1));
-                addControl(player, square(file + 2, rank - 1));
-                addControl(player, square(file - 2, rank + 1));
-                addControl(player, square(file - 2, rank - 1));
-                addControl(player, square(file + 1, rank + 2));
-                addControl(player, square(file + 1, rank - 2));
-                addControl(player, square(file - 1, rank + 2));
-                addControl(player, square(file - 1, rank - 2));
+                i = file == a ? 4 : 0;
+                i = file == b ? 2 : i;
+                end = file == h ? 4 : 8;
+                end = file == g ? 6 : end;
+                for(; i<end; i++) {
+                    addControl(player, index + knightMove[i]);
+                }
                 break;
             case PAWN :
-                int direction = player==0 ? 1 : -1;
-                addControl(player, square(file+1, rank+direction));
-                addControl(player, square(file-1, rank+direction));
+                if(file != a) {
+                    addControl(player, index + pawnMove[player][0]);
+                }
+                if(file != h) {
+                    addControl(player, index + pawnMove[player][2]);
+                }
                 break;
             default:
                 System.out.println("Waring (updateControl) : unrecognized piece (" + (piece%BLACK) + ")");
@@ -854,12 +858,9 @@ public class ChessBoard implements Board {
         while (file < size && file >= 0 && rank < size && rank >= 0) {
             int destination = square(file, rank);
             int pieceInDest = pieces[destination];
-            // empty square
-            if(pieceInDest == UNDEFINED) {
-                addControl(player, destination);
-            }
-            else  {
-                addControl(player, destination);
+            addControl(player, destination);
+            // non empty
+            if(pieceInDest != UNDEFINED) {
                 break;
             }
             file = file + fileInc;
@@ -869,7 +870,7 @@ public class ChessBoard implements Board {
 
     private void addControl(int player, int index) {
         if(index >= 0 && index < nbSquares) {
-            int tmp = player==0? whiteControls[index]++ : blackControls[index]++;
+            control[player][index]++;
         }
     }
 
@@ -887,20 +888,19 @@ public class ChessBoard implements Board {
                 int index = square(j,i);
                 currChar = boardID.charAt(charIndex++);
                 if(currChar == '/') { currChar = boardID.charAt(charIndex++); }
+
+                // black pieces are lowercase letters
+                int color = 0;
+                if (currChar < 'z' && currChar > 'a') {
+                    color = 1;
+                    currChar += 'A' - 'a';
+                }
                 // white pieces are uppercase letters
                 if (currChar < 'Z' && currChar > 'A') {
-                    pieces[index] = pieceValue(currChar);
-                    if(pieces[index]%BLACK == KING) {
-                        kingIndex[0] = index;
-                    }
-                }
-                // black pieces are lowercase letters
-                else if (currChar < 'z' && currChar > 'a') {
-                    pieces[index] = BLACK;
-                    currChar += 'A' - 'a';
-                    pieces[index] += pieceValue(currChar);
-                    if(pieces[index]%BLACK == KING) {
-                        kingIndex[1] = index;
+                    int pieceValue = pieceValue(currChar);
+                    pieces[index] = pieceValue + color * BLACK;
+                    if(pieceValue%BLACK == KING) {
+                        kingIndex[color] = index;
                     }
                 }
                 // not a letter -> must be a  number
@@ -1009,8 +1009,7 @@ public class ChessBoard implements Board {
 
     /* -----  Looking for checks  ----- */
     private boolean isCheck(int player) {
-        int[] control = player==0? blackControls : whiteControls;
-        if(control[kingIndex[player]] > 0) {
+        if(control[1-player][kingIndex[player]] > 0) {
             return true;
         }
         return false;
@@ -1035,7 +1034,7 @@ public class ChessBoard implements Board {
                                 GETTERS
 ------------------------------------------------------------------------------*/
     public int getPiece(int index) {
-        if(index > nbSquares || index < 0) {
+        if(index >= nbSquares || index < 0) {
             return UNDEFINED;
         }
         return pieces[index];
@@ -1058,7 +1057,7 @@ public class ChessBoard implements Board {
         if(player > 1 || player < 0) {
             return null;
         }
-        return player==0? whiteControls : blackControls;
+        return control[player];
     }
 
 /*------------------------------------------------------------------------------
@@ -1074,24 +1073,23 @@ public class ChessBoard implements Board {
     public static int getRank(int index) { return index/size; }
     public static int getFile(int index) { return index%size; }
 
-    public Long toHash() {
-        long toReturn = 0;
-        long nbBlank = 0;
-        long base = 127;
-        long currBaseValue = base * base;
+    private void zobristInit() {
+        Random r = new Random();
+        zobristTable = new long[nbSquares][14];
         for(int i=0; i<nbSquares; i++) {
-            if(pieces[i] == UNDEFINED) {
-                nbBlank++;
-                continue;
+            for(int j=0; j<14; j++) {
+                zobristTable[i][j] = r.nextLong();
             }
-            if(nbBlank != 0) {
-                toReturn += nbBlank * currBaseValue;
-                nbBlank = 0;
-            }
-            toReturn +=  pieces[i] * currBaseValue;
-            currBaseValue *= base;
         }
-        return Long.valueOf(toReturn);
+    }
+
+    public Long toHash() {
+        long h = 0;
+        for(int i=0; i<nbSquares; i++) {
+            int j = pieces[i];
+            h = h ^ zobristTable[i][j];
+        }
+        return Long.valueOf(h);
     }
 
     public String gameToPGN() {
@@ -1222,75 +1220,6 @@ public class ChessBoard implements Board {
         return square(file, rank);
     }
 
-    public String controlToString(int player, boolean flipped) {
-        final String ANSI_BG_BLACK  = "\u001B[40m";
-
-        final String ANSI_BRIGHT_BG_YELLOW = "\u001B[103m";
-        final String ANSI_BRIGHT_BG_CYAN   = "\u001B[106m";
-        final String ANSI_RESET = "\u001B[0m";
-        final String ANSI_RED = "\u001B[31m";
-        final String ANSI_GREEN = "\u001B[32m";
-
-        String toReturn = "";
-        if(!flipped) {
-            toReturn += "   | a | b | c | d | e | f | g | h | \n";
-        }
-        else {
-            toReturn += "   | h | g | f | e | d | c | b | a | \n";
-        }
-        for(byte i=0; i<8; i++) {
-            byte raw = i;
-            if (!flipped) {
-              raw = (byte) (7-i);
-            }
-            toReturn += "---+---+---+---+---+---+---+---+---+---\n";
-            toReturn += " " + Integer.toString(raw+1) + " ";
-            for(byte j=0; j<8; j++) {
-                byte column = j;
-                if(flipped) {
-                column = (byte) (7-j);
-            }
-                int pieceInSquare = pieces[square(column, raw)];
-                toReturn += "|";
-
-                if(player == 0) {
-                    if (whiteControls[square(column, raw)] != 0) {
-                        toReturn += ANSI_BRIGHT_BG_CYAN;
-                    }
-                }
-                else {
-                    if (blackControls[square(column, raw)] != 0) {
-                        toReturn += ANSI_BRIGHT_BG_YELLOW;
-                    }
-                }
-
-                if(pieceInSquare == UNDEFINED) {
-                    toReturn += "   ";
-                }
-                else {
-                    if (pieceInSquare/BLACK == 0) {
-                        toReturn += ANSI_GREEN;
-                    }
-                    else {
-                        toReturn += ANSI_RED;
-                    }
-                    toReturn += " " + Character.toString(pieceName(pieceInSquare)) + " ";
-                    toReturn += ANSI_RESET;
-                }
-                toReturn += ANSI_BG_BLACK;
-            }
-            toReturn += "| " + Integer.toString(raw+1) + "\n";
-        }
-        toReturn += "---+---+---+---+---+---+---+---+---+---\n";
-        if(!flipped) {
-            toReturn += "   | a | b | c | d | e | f | g | h | \n";
-        }
-        else {
-            toReturn += "   | h | g | f | e | d | c | b | a | \n";
-        }
-        return toReturn;
-    }
-
     public void activatePrint() { printGame = true; }
 
     public void silentMode() { printGame = false; }
@@ -1307,13 +1236,14 @@ class BoardState {
     protected final int enPassantIndex;
     protected final int[] pieces;
     protected final int[] kingIndex;
-    protected final int[] whiteControls;
-    protected final int[] blackControls;
+    protected final int[][] control;
     protected final Vector<Move> legalMoves;
     protected final boolean[] castlingRights;
     protected final int nbMovesNoTake;
     protected final Move lastMove;
     private final HashMap<Long, Integer> playedPositions;
+    protected final boolean computedControlW;
+    protected final boolean computedControlB;
 
     BoardState(ChessBoard board) {
         this.enPassantIndex = board.enPassantIndex;
@@ -1322,13 +1252,14 @@ class BoardState {
         this.kingIndex = new int[2];
         this.kingIndex[0] = board.kingIndex[0];
         this.kingIndex[1] = board.kingIndex[1];
-        this.whiteControls = board.whiteControls;
-        this.blackControls = board.blackControls;
+        this.control = board.control;
         this.legalMoves = board.legalMoves;
         this.castlingRights = board.castlingRights;
         this.nbMovesNoTake = board.nbMovesNoTake;
         this.lastMove = board.lastMove;
         this.playedPositions = new HashMap<Long, Integer>(board.playedPositions);
+        this.computedControlW = board.computedControlW;
+        this.computedControlB = board.computedControlB;
     }
 
     void recoverBoardState(ChessBoard board) {
@@ -1336,12 +1267,13 @@ class BoardState {
         board.pieces = this.pieces;
         board.kingIndex[0] = this.kingIndex[0];
         board.kingIndex[1] = this.kingIndex[1];
-        board.whiteControls = this.whiteControls;
-        board.blackControls = this.blackControls;
+        board.control = this.control;
         board.legalMoves = this.legalMoves;
         board.castlingRights = this.castlingRights;
         board.nbMovesNoTake = this.nbMovesNoTake;
         board.lastMove = lastMove;
         board.playedPositions = this.playedPositions;
+        board.computedControlW = this.computedControlW;
+        board.computedControlB = this.computedControlB;
     }
 }

@@ -27,46 +27,20 @@ public class ChessMove implements Move {
         construct();
     }
 
-    public ChessMove(ChessBoard board, String moveName) {
-        this.board = board;
-        if(moveName.equals("resign")) {
-            resign = true;
-            return;
-        }
-        else if(moveName.equals("0-0")) {
+    public ChessMove(ChessBoard board, int castle) {
+        int turn = board.getTurn();
+        if(castle == SHORT_CASTLE) {
             moveType = SHORT_CASTLE;
-            origin = 4 + board.getTurn()*56;
-            destination = 6 + board.getTurn()*56;
+            origin = 4 + turn*56;
+            destination = 6 + turn*56;
             return;
         }
-        else if(moveName.equals("0-0-0")) {
+        else if(castle == LONG_CASTLE) {
             moveType = LONG_CASTLE;
-            origin = 4 + board.getTurn()*56;
-            destination = 2 + board.getTurn()*56;
+            origin = 4 + turn*56;
+            destination = 2 + turn*56;
             return;
         }
-
-        int charIndex = 0;
-        char currChar = moveName.charAt(charIndex);
-        if(currChar >= 'A' && currChar <= 'Z') {
-            moving = ChessBoard.pieceValue(currChar);
-            charIndex++;
-        }
-        else {
-            moving = ChessBoard.PAWN;
-        }
-
-        origin = ChessBoard.stringToSquare(moveName.substring(charIndex));
-        charIndex += 2;
-
-        if(moveName.charAt(charIndex) == 'x') {
-            charIndex++;
-        }
-
-        destination = ChessBoard.stringToSquare(moveName.substring(charIndex));
-        charIndex += 2;
-
-        construct();
     }
 
     private void construct() {

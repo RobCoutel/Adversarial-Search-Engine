@@ -92,14 +92,20 @@ public class BenchmarkCorrectness {
 
 
 
+        AgentCount ac = new AgentCount("Count", 0);
+        ChessBoard board = new ChessBoard(positionID, ac, ac);
+        System.out.println(board);
+        System.out.println(board.getLegalMoves());
+        boolean correct = true;
         for(int i=0; i<depth; i++) {
             long startTime = System.currentTimeMillis();
-            AgentCount ac = new AgentCount("Count", i);
+            ac = new AgentCount("Count", i);
 
-            ChessBoard board = new ChessBoard(positionID, ac, ac);
+            board = new ChessBoard(positionID, ac, ac);
             ac.play(board);
+            long computed = ac.getNbNodesExplored();
             System.out.println("The shannon number " + i + " is : " + shannonNumbers[i]);
-            System.out.println("My calculation is : " + ac.getNbNodesExplored());
+            System.out.println("My calculation is : " + computed);
             double newFreeMemory = (double) (runtime.totalMemory()/MEGABYTE)
             - (double) (runtime.freeMemory()/MEGABYTE);
             System.out.println("Memory used : " + (newFreeMemory - freeMemory) + "MB");
@@ -110,7 +116,14 @@ public class BenchmarkCorrectness {
             + (Math.ceil(1000*((double) ac.getNbNodesExplored()/(System.currentTimeMillis() - startTime))))
             + " nodes / sec\n");
             board = null;
+            correct = correct && shannonNumbers[i] == computed;
             System.gc();
+        }
+        if(correct) {
+            System.out.println("\nThe computation is correct!!");
+        }
+        else {
+            System.out.println("\n/!\\ There is a mistake!!");
         }
     }
 }
