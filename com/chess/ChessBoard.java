@@ -2,7 +2,7 @@
 ---- File information ----
 Name of project : Chess Engine
 Class : Board.java
-Date : March - 2021
+Date : September - 2021
 Author : Robin Coutelier
 Co-author : Lize Pirenne
 ------------------------------------------------------------------------------*/
@@ -768,7 +768,7 @@ public class ChessBoard implements Board {
     }
 
     /* -----  Updating controls  ----- */
-    private void updateControl(int player) {
+    public void updateControl(int player) {
         if((player==0 && computedControlW)
         || (player==1 && computedControlB)
         || (player==2 && computedControlW && computedControlB)) {

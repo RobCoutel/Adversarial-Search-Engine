@@ -29,6 +29,7 @@ public class ChessMove implements Move {
 
     public ChessMove(ChessBoard board, int castle) {
         int turn = board.getTurn();
+        this.board = board;
         if(castle == SHORT_CASTLE) {
             moveType = SHORT_CASTLE;
             origin = 4 + turn*56;
@@ -185,4 +186,7 @@ public class ChessMove implements Move {
 
     public boolean isResignation() { return resign; }
 
+    public boolean isThreat() {
+        return taken != ChessBoard.UNDEFINED;
+    }
 }

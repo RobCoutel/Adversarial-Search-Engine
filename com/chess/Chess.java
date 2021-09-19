@@ -42,6 +42,9 @@ public class Chess {
         else if(agentName.equals("AgentRandom")) {
             return new AgentRandom(color + "Agent Random");
         }
+        else if(agentName.equals("Search")) {
+            return new AgentSearch(color + " AgentSearch", depth, new ChessEvaluation());
+        }
         System.out.println("Unknown Agent \"" + agentName + "\"");
         return null;
     }

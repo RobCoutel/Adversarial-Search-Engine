@@ -41,6 +41,9 @@ public class TicTacToe {
         else if(agentName.equals("AgentRandom")) {
             return new AgentRandom(color + "Agent Random");
         }
+        else if(agentName.equals("Search")) {
+            return new AgentSearch(color + " Agent Seach", depth, new TTTEvaluation());
+        }
         System.out.println("Unknown Agent \"" + agentName + "\"");
         return null;
     }

@@ -10,4 +10,6 @@ public interface Move extends Comparable<Move> {
     public String toString();
 
     public boolean equals(Move move2);
+
+    public boolean isThreat();
 }

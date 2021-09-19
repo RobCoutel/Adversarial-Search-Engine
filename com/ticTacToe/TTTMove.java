@@ -40,4 +40,8 @@ public class TTTMove implements Move {
         }
         return Integer.toString(move);
     }
+
+    public boolean isThreat() {
+        return false;
+    }
 }
